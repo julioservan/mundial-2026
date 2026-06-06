@@ -1,36 +1,76 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Mundial 2026 — Quiniela
 
-## Getting Started
+Quiniela de predicciones para el Mundial 2026 (USA · Canadá · México). 48 equipos, 12 grupos, 104 partidos.
 
-First, run the development server:
+Hecho por [Julio Servan](https://instagram.com/julioservan).
+
+## Stack
+
+- **Next.js 16** (App Router, Turbopack)
+- **React 19**
+- **TypeScript**
+- **Tailwind CSS v4**
+- **Instrument Serif** + **Geist** (Google Fonts)
+
+## Features
+
+- 🏠 Home con countdown al partido inaugural y ticker de equipos
+- 📅 Calendario de partidos con vista de **Lista** y **Calendario** mensual
+- 🏆 Página de los 12 grupos con tabla de posiciones
+- 🥊 Bracket de eliminatoria (32 partidos a un encuentro)
+- 🎯 Formulario de predicciones con guardado local
+- 🏅 Ranking de usuarios
+- 🌙 Dark mode con tipografía display italic
+
+## Desarrollo
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Por defecto arranca en [http://localhost:3000](http://localhost:3000). Para usar otro puerto:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+PORT=3100 npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Estructura
 
-## Learn More
+```
+worldcup/
+├── app/                   # Rutas Next.js (App Router)
+│   ├── matches/           # Calendario (vista lista + calendario)
+│   ├── groups/            # 12 grupos
+│   ├── eliminatoria/      # Bracket eliminatoria
+│   ├── predictions/       # Formulario de quiniela
+│   ├── leaderboard/       # Ranking
+│   └── login/             # Stub auth (Supabase próximamente)
+├── components/            # Componentes reutilizables
+│   ├── Navbar.tsx
+│   ├── Footer.tsx
+│   ├── Countdown.tsx
+│   ├── MatchCard.tsx
+│   ├── MatchesView.tsx    # Toggle lista/calendario
+│   ├── MatchesList.tsx
+│   ├── MatchesCalendar.tsx
+│   ├── KnockoutBracket.tsx
+│   ├── PredictionForm.tsx
+│   └── TeamMarquee.tsx
+├── lib/
+│   ├── data/              # Mock data (teams, venues, matches)
+│   └── utils/             # Helpers (format, calendar)
+└── types/                 # TypeScript types
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Roadmap
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- [ ] Integrar Supabase para auth + persistencia
+- [ ] Sistema de puntuación real (con resultados oficiales)
+- [ ] Grupos privados para competir con amigos
+- [ ] Predicciones de eliminatoria
+- [ ] Deploy a Vercel
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Licencia
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Uso personal. Datos del torneo basados en información pública.
