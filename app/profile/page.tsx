@@ -64,8 +64,10 @@ export default function ProfilePage() {
 
     const { error: dbErr } = await supabase
       .from("mundial_profiles")
-      .update({ avatar_url: publicUrl })
-      .eq("id", user.id);
+      .upsert(
+        { id: user.id, avatar_url: publicUrl, username: username.trim() || "Jugador" },
+        { onConflict: "id" },
+      );
     if (dbErr) {
       setError(dbErr.message);
       setUploading(false);
@@ -84,10 +86,10 @@ export default function ProfilePage() {
     setError(null);
     setSaved(false);
 
+    // Upsert: crea la fila del perfil si aún no existe, o actualiza el nombre.
     const { error } = await getSupabase()
       .from("mundial_profiles")
-      .update({ username: username.trim() })
-      .eq("id", user.id);
+      .upsert({ id: user.id, username: username.trim() }, { onConflict: "id" });
 
     setSaving(false);
     if (error) {

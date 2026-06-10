@@ -60,11 +60,15 @@ async function ensureProfile(
     user.email?.split("@")[0] ||
     "Jugador";
 
-  const { data } = await getSupabase()
+  const { data, error } = await getSupabase()
     .from("mundial_profiles")
-    .insert({ id: user.id, username })
+    .upsert({ id: user.id, username }, { onConflict: "id" })
     .select("id, username, avatar_url, is_admin")
     .maybeSingle();
+  if (error) {
+    // No bloquea la app, pero deja rastro para diagnosticar (p. ej. RLS).
+    console.error("No se pudo crear el perfil:", error.message);
+  }
   return (data as MundialProfile) ?? null;
 }
 
