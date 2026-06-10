@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useAuth } from "@/lib/supabase/auth";
+import { Avatar } from "@/components/Avatar";
 
 export function AuthNav() {
   const { loading, user, profile } = useAuth();
@@ -16,9 +17,12 @@ export function AuthNav() {
         href="/profile"
         className="hidden sm:inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold border border-border-strong rounded-full hover:bg-surface transition-colors"
       >
-        <span className="w-6 h-6 rounded-full bg-accent text-accent-foreground flex items-center justify-center text-xs font-bold uppercase">
-          {(profile?.username ?? "?").charAt(0)}
-        </span>
+        <Avatar
+          url={profile?.avatar_url ?? null}
+          name={profile?.username ?? "?"}
+          size={24}
+          className="text-xs"
+        />
         <span className="max-w-[8rem] truncate">
           {profile?.username ?? "Perfil"}
         </span>

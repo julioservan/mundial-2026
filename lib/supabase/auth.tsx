@@ -14,6 +14,7 @@ import { getSupabase, isSupabaseConfigured } from "./client";
 export interface MundialProfile {
   id: string;
   username: string;
+  avatar_url: string | null;
   is_admin: boolean;
 }
 
@@ -37,7 +38,7 @@ const AuthContext = createContext<AuthState | null>(null);
 async function fetchProfile(userId: string): Promise<MundialProfile | null> {
   const { data } = await getSupabase()
     .from("mundial_profiles")
-    .select("id, username, is_admin")
+    .select("id, username, avatar_url, is_admin")
     .eq("id", userId)
     .maybeSingle();
   return (data as MundialProfile) ?? null;
@@ -62,7 +63,7 @@ async function ensureProfile(
   const { data } = await getSupabase()
     .from("mundial_profiles")
     .insert({ id: user.id, username })
-    .select("id, username, is_admin")
+    .select("id, username, avatar_url, is_admin")
     .maybeSingle();
   return (data as MundialProfile) ?? null;
 }

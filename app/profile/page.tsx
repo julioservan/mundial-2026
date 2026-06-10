@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/supabase/auth";
 import { getSupabase } from "@/lib/supabase/client";
+import { Avatar } from "@/components/Avatar";
+
+const AVATAR_BUCKET = "mundial-avatars";
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2 MB
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -17,10 +21,61 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
   }, [loading, user, router]);
+
+  async function handleAvatar(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // permite re-subir el mismo archivo
+    if (!file || !user) return;
+
+    if (!file.type.startsWith("image/")) {
+      setError("El archivo debe ser una imagen.");
+      return;
+    }
+    if (file.size > MAX_AVATAR_BYTES) {
+      setError("La imagen es muy grande (máx. 2 MB).");
+      return;
+    }
+
+    setUploading(true);
+    setError(null);
+    setSaved(false);
+
+    const supabase = getSupabase();
+    const path = `${user.id}/avatar`;
+
+    const { error: upErr } = await supabase.storage
+      .from(AVATAR_BUCKET)
+      .upload(path, file, { upsert: true, contentType: file.type });
+    if (upErr) {
+      setError(upErr.message);
+      setUploading(false);
+      return;
+    }
+
+    const { data } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path);
+    // ?v= rompe la caché para que se vea la foto nueva al instante.
+    const publicUrl = `${data.publicUrl}?v=${Date.now()}`;
+
+    const { error: dbErr } = await supabase
+      .from("mundial_profiles")
+      .update({ avatar_url: publicUrl })
+      .eq("id", user.id);
+    if (dbErr) {
+      setError(dbErr.message);
+      setUploading(false);
+      return;
+    }
+
+    await refreshProfile();
+    setUploading(false);
+    setSaved(true);
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -67,6 +122,35 @@ export default function ProfilePage() {
       </header>
 
       <div className="bg-surface border border-border rounded-2xl p-6 sm:p-8">
+        <div className="flex items-center gap-4 mb-6">
+          <Avatar
+            url={profile?.avatar_url ?? null}
+            name={profile?.username ?? "?"}
+            size={72}
+            className="text-2xl shrink-0"
+          />
+          <div>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="px-4 py-2 text-sm font-semibold border border-border-strong rounded-full hover:bg-surface-muted transition-colors disabled:opacity-60"
+            >
+              {uploading ? "Subiendo…" : "Cambiar foto"}
+            </button>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              JPG o PNG, máx. 2 MB.
+            </p>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleAvatar}
+            className="hidden"
+          />
+        </div>
+
         <form onSubmit={handleSave} className="space-y-4">
           <label className="block">
             <span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
