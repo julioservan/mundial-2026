@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AuthNav } from "@/components/AuthNav";
 
 const LINKS = [
   { href: "/matches", label: "Partidos" },
@@ -34,13 +35,7 @@ export function Navbar() {
           ))}
         </nav>
 
-        <Link
-          href="/login"
-          className="hidden sm:inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold bg-accent text-accent-foreground rounded-full hover:bg-accent-bold transition-colors"
-        >
-          Entrar
-          <span aria-hidden>→</span>
-        </Link>
+        <AuthNav />
       </div>
 
       <nav className="md:hidden border-t border-border overflow-x-auto">
