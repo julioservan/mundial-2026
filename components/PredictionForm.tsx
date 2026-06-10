@@ -1,42 +1,96 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import type { Match } from "@/types";
 import { getTeam } from "@/lib/data/teams";
 import { LocalTime } from "@/components/LocalTime";
+import { useAuth } from "@/lib/supabase/auth";
+import {
+  type ScoreMap,
+  clearLocal,
+  deleteAllRemote,
+  deleteRemote,
+  fetchRemote,
+  hasAnyFilled,
+  isFilled,
+  loadLocal,
+  migrateLocalToRemote,
+  saveLocal,
+  upsertRemote,
+} from "@/lib/predictions";
 
-const STORAGE_KEY = "wc2026:predictions";
-
-function loadFromStorage(): Record<string, { home: string; away: string }> {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveToStorage(state: Record<string, { home: string; away: string }>) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
+type SyncStatus = "idle" | "saving" | "saved" | "error";
 
 interface Props {
   matches: Match[];
 }
 
 export function PredictionForm({ matches }: Props) {
-  const [predictions, setPredictions] = useState<
-    Record<string, { home: string; away: string }>
-  >({});
+  const { loading: authLoading, user } = useAuth();
+  const [predictions, setPredictions] = useState<ScoreMap>({});
   const [hydrated, setHydrated] = useState(false);
+  const [status, setStatus] = useState<SyncStatus>("idle");
   const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
+  const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
+  // Carga inicial: desde Supabase si hay sesión (migrando lo local la primera
+  // vez), o desde localStorage si se juega sin cuenta.
   useEffect(() => {
-    setPredictions(loadFromStorage());
-    setHydrated(true);
-  }, []);
+    let active = true;
+    async function load() {
+      if (authLoading) return;
+      if (user) {
+        try {
+          const remote = await fetchRemote(user.id);
+          const local = loadLocal();
+          if (Object.keys(remote).length === 0 && hasAnyFilled(local)) {
+            await migrateLocalToRemote(user.id, local);
+            clearLocal();
+            if (active) setPredictions(local);
+          } else if (active) {
+            setPredictions(remote);
+          }
+        } catch {
+          if (active) setStatus("error");
+        }
+      } else if (active) {
+        setPredictions(loadLocal());
+      }
+      if (active) setHydrated(true);
+    }
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [user, authLoading]);
+
+  // Guarda un partido concreto (con rebote) en la base de datos.
+  const scheduleRemoteSync = useCallback(
+    (matchId: string, score: { home: string; away: string }) => {
+      if (!user) return;
+      clearTimeout(timersRef.current[matchId]);
+      setStatus("saving");
+      timersRef.current[matchId] = setTimeout(async () => {
+        try {
+          if (isFilled(score)) {
+            await upsertRemote(
+              user.id,
+              matchId,
+              Number(score.home),
+              Number(score.away),
+            );
+          } else {
+            await deleteRemote(user.id, matchId);
+          }
+          setStatus("saved");
+        } catch {
+          setStatus("error");
+        }
+      }, 600);
+    },
+    [user],
+  );
 
   function updateScore(
     matchId: string,
@@ -46,30 +100,63 @@ export function PredictionForm({ matches }: Props) {
   ) {
     const sanitized = value.replace(/[^0-9]/g, "").slice(0, 2);
     const previous = predictions[matchId]?.[side] ?? "";
-    const next = {
-      ...predictions,
-      [matchId]: {
-        home: side === "home" ? sanitized : predictions[matchId]?.home ?? "",
-        away: side === "away" ? sanitized : predictions[matchId]?.away ?? "",
-      },
+    const score = {
+      home: side === "home" ? sanitized : predictions[matchId]?.home ?? "",
+      away: side === "away" ? sanitized : predictions[matchId]?.away ?? "",
     };
+    const next = { ...predictions, [matchId]: score };
     setPredictions(next);
-    saveToStorage(next);
-    // Salta al siguiente campo al teclear un dígito (no al borrar). Para un
-    // marcador de dos cifras basta volver al campo y añadir el segundo dígito.
+
+    if (user) {
+      scheduleRemoteSync(matchId, score);
+    } else {
+      saveLocal(next);
+    }
+
+    // Salta al siguiente campo al teclear un dígito (no al borrar).
     if (sanitized.length > previous.length) {
       inputsRef.current[inputIndex + 1]?.focus();
     }
   }
 
+  async function handleReset() {
+    if (!confirm("¿Borrar todas las predicciones?")) return;
+    setPredictions({});
+    if (user) {
+      setStatus("saving");
+      try {
+        await deleteAllRemote(user.id);
+        setStatus("saved");
+      } catch {
+        setStatus("error");
+      }
+    } else {
+      clearLocal();
+    }
+  }
+
   const completed = hydrated
-    ? Object.values(predictions).filter((p) => p.home !== "" && p.away !== "")
-        .length
+    ? Object.values(predictions).filter(isFilled).length
     : 0;
   const progress = matches.length > 0 ? (completed / matches.length) * 100 : 0;
 
   return (
     <div>
+      {hydrated && !user && (
+        <div className="bg-accent-soft border border-accent/30 rounded-2xl px-5 py-4 mb-6 text-sm flex items-center justify-between gap-4">
+          <span>
+            Estás jugando <strong>sin cuenta</strong>. Tus predicciones se
+            guardan solo en este navegador.
+          </span>
+          <Link
+            href="/login"
+            className="shrink-0 font-semibold text-accent hover:underline underline-offset-4"
+          >
+            Inicia sesión →
+          </Link>
+        </div>
+      )}
+
       <div className="bg-surface border border-border rounded-2xl p-5 mb-8 sticky top-16 z-10 backdrop-blur">
         <div className="flex items-baseline justify-between mb-3">
           <div>
@@ -85,17 +172,15 @@ export function PredictionForm({ matches }: Props) {
               </span>
             </div>
           </div>
-          <button
-            onClick={() => {
-              if (confirm("¿Borrar todas las predicciones?")) {
-                setPredictions({});
-                saveToStorage({});
-              }
-            }}
-            className="text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground"
-          >
-            Resetear
-          </button>
+          <div className="flex items-center gap-4">
+            {user && <SyncBadge status={status} />}
+            <button
+              onClick={handleReset}
+              className="text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground"
+            >
+              Resetear
+            </button>
+          </div>
         </div>
         <div className="h-1.5 bg-surface-muted rounded-full overflow-hidden">
           <div
@@ -111,7 +196,7 @@ export function PredictionForm({ matches }: Props) {
           const away = getTeam(match.awayTeamId);
           const homeInputIndex = matchIndex * 2;
           const p = predictions[match.id] ?? { home: "", away: "" };
-          const filled = p.home !== "" && p.away !== "";
+          const filled = isFilled(p);
 
           return (
             <li
@@ -184,5 +269,26 @@ export function PredictionForm({ matches }: Props) {
         })}
       </ul>
     </div>
+  );
+}
+
+function SyncBadge({ status }: { status: SyncStatus }) {
+  const label =
+    status === "saving"
+      ? "Guardando…"
+      : status === "saved"
+        ? "Guardado ✓"
+        : status === "error"
+          ? "Error al guardar"
+          : "";
+  if (!label) return null;
+  return (
+    <span
+      className={`text-xs font-medium ${
+        status === "error" ? "text-pink" : "text-muted-foreground"
+      }`}
+    >
+      {label}
+    </span>
   );
 }
