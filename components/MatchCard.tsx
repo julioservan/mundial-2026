@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { Match, MatchStage } from "@/types";
 import { getTeam } from "@/lib/data/teams";
-import { formatMatchDate, formatMatchTime, stageLabel } from "@/lib/utils/format";
+import { stageLabel } from "@/lib/utils/format";
+import { LocalTime } from "@/components/LocalTime";
 
 interface Props {
   match: Match;
@@ -33,7 +34,7 @@ export function MatchCard({ match, href }: Props) {
             {match.matchday ? ` · J${match.matchday}` : ""}
           </span>
           <span className="font-mono">
-            {formatMatchDate(match.kickoff)} · {formatMatchTime(match.kickoff)}
+            <LocalTime iso={match.kickoff} />
           </span>
         </div>
 

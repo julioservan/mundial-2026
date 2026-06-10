@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import type { Match } from "@/types";
 import { getTeam } from "@/lib/data/teams";
-import { formatMatchTime, stageLabel } from "@/lib/utils/format";
+import { stageLabel } from "@/lib/utils/format";
+import { LocalTime } from "@/components/LocalTime";
 import {
   buildMonthGrid,
   isSameDay,
@@ -201,7 +202,7 @@ export function MatchesCalendar({ matches }: Props) {
                   className="flex items-center justify-between gap-3 text-sm border-b border-border last:border-0 pb-2 last:pb-0"
                 >
                   <span className="font-mono text-muted-foreground tabular-nums w-12">
-                    {formatMatchTime(m.kickoff)}
+                    <LocalTime iso={m.kickoff} mode="time" />
                   </span>
                   <span className="flex-1 truncate">
                     {home?.flag ?? "?"} {home?.name ?? "Por definir"}{" "}

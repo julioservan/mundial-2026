@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Match } from "@/types";
 import { getTeam } from "@/lib/data/teams";
-import { formatMatchDate, formatMatchTime } from "@/lib/utils/format";
+import { LocalTime } from "@/components/LocalTime";
 
 const STORAGE_KEY = "wc2026:predictions";
 
@@ -31,14 +31,21 @@ export function PredictionForm({ matches }: Props) {
     Record<string, { home: string; away: string }>
   >({});
   const [hydrated, setHydrated] = useState(false);
+  const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
     setPredictions(loadFromStorage());
     setHydrated(true);
   }, []);
 
-  function updateScore(matchId: string, side: "home" | "away", value: string) {
+  function updateScore(
+    matchId: string,
+    side: "home" | "away",
+    value: string,
+    inputIndex: number,
+  ) {
     const sanitized = value.replace(/[^0-9]/g, "").slice(0, 2);
+    const previous = predictions[matchId]?.[side] ?? "";
     const next = {
       ...predictions,
       [matchId]: {
@@ -48,6 +55,11 @@ export function PredictionForm({ matches }: Props) {
     };
     setPredictions(next);
     saveToStorage(next);
+    // Salta al siguiente campo al teclear un dígito (no al borrar). Para un
+    // marcador de dos cifras basta volver al campo y añadir el segundo dígito.
+    if (sanitized.length > previous.length) {
+      inputsRef.current[inputIndex + 1]?.focus();
+    }
   }
 
   const completed = hydrated
@@ -94,9 +106,10 @@ export function PredictionForm({ matches }: Props) {
       </div>
 
       <ul className="space-y-3">
-        {matches.map((match) => {
+        {matches.map((match, matchIndex) => {
           const home = getTeam(match.homeTeamId);
           const away = getTeam(match.awayTeamId);
+          const homeInputIndex = matchIndex * 2;
           const p = predictions[match.id] ?? { home: "", away: "" };
           const filled = p.home !== "" && p.away !== "";
 
@@ -112,8 +125,7 @@ export function PredictionForm({ matches }: Props) {
                   Grupo {match.group} · J{match.matchday}
                 </span>
                 <span className="font-mono">
-                  {formatMatchDate(match.kickoff)} ·{" "}
-                  {formatMatchTime(match.kickoff)}
+                  <LocalTime iso={match.kickoff} />
                 </span>
               </div>
               <div className="grid grid-cols-[1fr_auto_1fr] gap-3 sm:gap-4 items-center">
@@ -127,12 +139,15 @@ export function PredictionForm({ matches }: Props) {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <input
+                    ref={(el) => {
+                      inputsRef.current[homeInputIndex] = el;
+                    }}
                     type="text"
                     inputMode="numeric"
                     pattern="[0-9]*"
                     value={p.home}
                     onChange={(e) =>
-                      updateScore(match.id, "home", e.target.value)
+                      updateScore(match.id, "home", e.target.value, homeInputIndex)
                     }
                     className="w-12 h-12 sm:w-14 sm:h-14 text-center font-display text-2xl sm:text-3xl bg-background border border-border rounded-xl focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/30 transition-all"
                     placeholder="—"
@@ -140,12 +155,15 @@ export function PredictionForm({ matches }: Props) {
                   />
                   <span className="text-muted-foreground text-xs font-mono">vs</span>
                   <input
+                    ref={(el) => {
+                      inputsRef.current[homeInputIndex + 1] = el;
+                    }}
                     type="text"
                     inputMode="numeric"
                     pattern="[0-9]*"
                     value={p.away}
                     onChange={(e) =>
-                      updateScore(match.id, "away", e.target.value)
+                      updateScore(match.id, "away", e.target.value, homeInputIndex + 1)
                     }
                     className="w-12 h-12 sm:w-14 sm:h-14 text-center font-display text-2xl sm:text-3xl bg-background border border-border rounded-xl focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/30 transition-all"
                     placeholder="—"

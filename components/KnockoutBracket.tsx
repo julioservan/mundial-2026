@@ -1,6 +1,7 @@
 import type { Match, MatchStage } from "@/types";
 import { getTeam } from "@/lib/data/teams";
-import { formatMatchDate, formatMatchTime, stageLabel } from "@/lib/utils/format";
+import { stageLabel } from "@/lib/utils/format";
+import { LocalTime } from "@/components/LocalTime";
 
 interface Props {
   matches: Match[];
@@ -36,7 +37,7 @@ function MatchCardBracket({ match }: { match: Match }) {
     >
       <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2 flex justify-between">
         <span>
-          {formatMatchDate(match.kickoff)} · {formatMatchTime(match.kickoff)}
+          <LocalTime iso={match.kickoff} />
         </span>
       </div>
       <div className="space-y-1.5">
