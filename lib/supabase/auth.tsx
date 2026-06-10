@@ -15,6 +15,7 @@ export interface MundialProfile {
   id: string;
   username: string;
   avatar_url: string | null;
+  timezone: string | null;
   is_admin: boolean;
 }
 
@@ -38,7 +39,7 @@ const AuthContext = createContext<AuthState | null>(null);
 async function fetchProfile(userId: string): Promise<MundialProfile | null> {
   const { data } = await getSupabase()
     .from("mundial_profiles")
-    .select("id, username, avatar_url, is_admin")
+    .select("id, username, avatar_url, timezone, is_admin")
     .eq("id", userId)
     .maybeSingle();
   return (data as MundialProfile) ?? null;
@@ -63,7 +64,7 @@ async function ensureProfile(
   const { data, error } = await getSupabase()
     .from("mundial_profiles")
     .upsert({ id: user.id, username }, { onConflict: "id" })
-    .select("id, username, avatar_url, is_admin")
+    .select("id, username, avatar_url, timezone, is_admin")
     .maybeSingle();
   if (error) {
     // No bloquea la app, pero deja rastro para diagnosticar (p. ej. RLS).

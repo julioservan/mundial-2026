@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Match } from "@/types";
 import { getTeam } from "@/lib/data/teams";
-import { formatMatchDate, formatMatchTime } from "@/lib/utils/format";
+import { LocalTime } from "@/components/LocalTime";
 
 const STORAGE_KEY = "wc2026:predictions";
 
@@ -125,8 +125,7 @@ export function PredictionForm({ matches }: Props) {
                   Grupo {match.group} · J{match.matchday}
                 </span>
                 <span className="font-mono">
-                  {formatMatchDate(match.kickoff)} ·{" "}
-                  {formatMatchTime(match.kickoff)}
+                  <LocalTime iso={match.kickoff} />
                 </span>
               </div>
               <div className="grid grid-cols-[1fr_auto_1fr] gap-3 sm:gap-4 items-center">

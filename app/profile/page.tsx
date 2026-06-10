@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/supabase/auth";
 import { getSupabase } from "@/lib/supabase/client";
 import { Avatar } from "@/components/Avatar";
+import { TIMEZONES } from "@/lib/timezones";
 
 const AVATAR_BUCKET = "mundial-avatars";
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2 MB
@@ -18,6 +19,8 @@ export default function ProfilePage() {
   // perfil. Así evitamos sincronizar estado desde un efecto.
   const [draft, setDraft] = useState<string | null>(null);
   const username = draft ?? profile?.username ?? "";
+  const [tzDraft, setTzDraft] = useState<string | null>(null);
+  const timezone = tzDraft ?? profile?.timezone ?? "";
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,10 +89,15 @@ export default function ProfilePage() {
     setError(null);
     setSaved(false);
 
-    // Upsert: crea la fila del perfil si aún no existe, o actualiza el nombre.
-    const { error } = await getSupabase()
-      .from("mundial_profiles")
-      .upsert({ id: user.id, username: username.trim() }, { onConflict: "id" });
+    // Upsert: crea la fila del perfil si aún no existe, o actualiza los datos.
+    const { error } = await getSupabase().from("mundial_profiles").upsert(
+      {
+        id: user.id,
+        username: username.trim(),
+        timezone: timezone || null,
+      },
+      { onConflict: "id" },
+    );
 
     setSaving(false);
     if (error) {
@@ -98,6 +106,7 @@ export default function ProfilePage() {
     }
     await refreshProfile();
     setDraft(null);
+    setTzDraft(null);
     setSaved(true);
   }
 
@@ -168,6 +177,30 @@ export default function ProfilePage() {
               required
               className="mt-1.5 w-full px-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/30 transition-all"
             />
+          </label>
+
+          <label className="block">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+              Zona horaria
+            </span>
+            <select
+              value={timezone}
+              onChange={(e) => {
+                setTzDraft(e.target.value);
+                setSaved(false);
+              }}
+              className="mt-1.5 w-full px-4 py-3 bg-background border border-border rounded-xl focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/30 transition-all"
+            >
+              {TIMEZONES.map((tz) => (
+                <option key={tz.value} value={tz.value}>
+                  {tz.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Usamos tu zona horaria para mostrarte la hora de cada partido en tu
+              hora local. Así no tienes que calcular la diferencia.
+            </p>
           </label>
 
           <div className="text-xs text-muted-foreground">
