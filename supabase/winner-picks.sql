@@ -20,9 +20,12 @@ alter table public.mundial_predictions
   check (pick is null or pick in ('home', 'draw', 'away'));
 
 -- 2) Vista de ranking basada en el ganador.
+--    Se borra antes de recrear porque cambian sus columnas (CREATE OR REPLACE
+--    no permite cambiar el conjunto de columnas de una vista existente).
 --    El ganador pronosticado sale de `pick`; si una predicción antigua tenía
 --    marcador, se deriva de él. El ganador real se deriva del resultado.
-create or replace view public.mundial_leaderboard
+drop view if exists public.mundial_leaderboard;
+create view public.mundial_leaderboard
 with (security_invoker = on) as
 with scored as (
   select
