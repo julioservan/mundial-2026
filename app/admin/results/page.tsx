@@ -103,10 +103,13 @@ export default function AdminResultsPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
       <header className="mb-8">
-        <div className="text-[11px] font-semibold tracking-[0.2em] uppercase text-accent mb-3">
-          — Admin
-        </div>
-        <h1 className="text-4xl sm:text-5xl font-bold tracking-tight">
+        <Link
+          href="/admin"
+          className="text-sm font-semibold text-accent hover:underline underline-offset-4"
+        >
+          ← Panel admin
+        </Link>
+        <h1 className="text-4xl sm:text-5xl font-bold tracking-tight mt-3">
           Resultados <span className="font-display text-accent">reales.</span>
         </h1>
         <p className="text-muted-foreground mt-3 text-sm">
