@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { Match } from "@/types";
 import { getTeam } from "@/lib/data/teams";
@@ -35,9 +35,25 @@ export function PredictionForm({ matches }: Props) {
   const [status, setStatus] = useState<SyncStatus>("idle");
   const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
+  // Conjunto de IDs de partido válidos en el calendario actual.
+  const validIds = useMemo(() => new Set(matches.map((m) => m.id)), [matches]);
+
+  // Deja solo los pronósticos de partidos que existen ahora.
+  const onlyValid = useCallback(
+    (map: PickMap): PickMap => {
+      const out: PickMap = {};
+      for (const [id, p] of Object.entries(map)) {
+        if (validIds.has(id)) out[id] = p;
+      }
+      return out;
+    },
+    [validIds],
+  );
+
   // Carga inicial: desde Supabase si hay sesión (migrando lo local la primera
   // vez), o desde localStorage si se juega sin cuenta. Los resultados son
-  // públicos y se cargan siempre.
+  // públicos y se cargan siempre. Se ignoran (y limpian) los pronósticos
+  // huérfanos de partidos que ya no existen en el calendario.
   useEffect(() => {
     let active = true;
     async function load() {
@@ -51,19 +67,26 @@ export function PredictionForm({ matches }: Props) {
       if (user) {
         try {
           const remote = await fetchRemote(user.id);
-          const local = loadLocal();
-          if (Object.keys(remote).length === 0 && hasAnyPick(local)) {
+          // Borra en segundo plano los pronósticos de partidos inexistentes.
+          const orphans = Object.keys(remote).filter((id) => !validIds.has(id));
+          for (const id of orphans) {
+            void deleteRemote(user.id, id).catch(() => {});
+          }
+
+          const remoteValid = onlyValid(remote);
+          const local = onlyValid(loadLocal());
+          if (Object.keys(remoteValid).length === 0 && hasAnyPick(local)) {
             await migrateLocalToRemote(user.id, local);
             clearLocal();
             if (active) setPicks(local);
           } else if (active) {
-            setPicks(remote);
+            setPicks(remoteValid);
           }
         } catch {
           if (active) setStatus("error");
         }
       } else if (active) {
-        setPicks(loadLocal());
+        setPicks(onlyValid(loadLocal()));
       }
       if (active) setHydrated(true);
     }
@@ -71,7 +94,7 @@ export function PredictionForm({ matches }: Props) {
     return () => {
       active = false;
     };
-  }, [user, authLoading]);
+  }, [user, authLoading, validIds, onlyValid]);
 
   const scheduleRemoteSync = useCallback(
     (matchId: string, pick: Pick | null) => {
