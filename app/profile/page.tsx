@@ -30,8 +30,8 @@ export default function ProfilePage() {
   const [stats, setStats] = useState<{
     rank: number;
     points: number;
-    exact: number;
     correct: number;
+    scored: number;
   } | null>(null);
 
   useEffect(() => {
@@ -51,8 +51,8 @@ export default function ProfilePage() {
           setStats({
             rank: idx + 1,
             points: me.points,
-            exact: me.exactScores,
-            correct: me.correctOutcomes,
+            correct: me.correct,
+            scored: me.predictionsScored,
           });
         }
       } catch {
@@ -174,8 +174,8 @@ export default function ProfilePage() {
           <div className="grid grid-cols-4 gap-2 text-center">
             <Stat value={`#${stats.rank}`} label="Puesto" highlight />
             <Stat value={stats.points} label="Puntos" highlight />
-            <Stat value={stats.exact} label="Exactos" />
-            <Stat value={stats.correct} label="Resultados" />
+            <Stat value={stats.correct} label="Aciertos" />
+            <Stat value={stats.scored} label="Jugados" />
           </div>
         </Link>
       )}

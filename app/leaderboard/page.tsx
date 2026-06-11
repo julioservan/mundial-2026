@@ -42,9 +42,8 @@ export default function LeaderboardPage() {
         </h1>
         <p className="text-muted-foreground mt-4">
           Quién acierta más. Se actualiza al cargar los resultados de los
-          partidos. <span className="text-foreground">3 pts</span> marcador
-          exacto · <span className="text-foreground">1 pt</span> acertar el
-          resultado.
+          partidos. <span className="text-foreground">1 punto</span> por acertar
+          quién gana cada partido.
         </p>
       </header>
 
@@ -63,8 +62,7 @@ export default function LeaderboardPage() {
               <tr>
                 <th className="text-left px-5 py-3 w-12">#</th>
                 <th className="text-left px-5 py-3">Jugador</th>
-                <th className="text-center px-3 py-3 w-16">Exact.</th>
-                <th className="text-center px-3 py-3 w-16">Result.</th>
+                <th className="text-center px-3 py-3 w-20">Aciertos</th>
                 <th className="text-right px-5 py-3 w-20">Pts</th>
               </tr>
             </thead>
@@ -106,10 +104,10 @@ export default function LeaderboardPage() {
                     </div>
                   </td>
                   <td className="px-3 py-4 text-center tabular-nums text-muted-foreground">
-                    {entry.exactScores}
-                  </td>
-                  <td className="px-3 py-4 text-center tabular-nums text-muted-foreground">
-                    {entry.correctOutcomes}
+                    {entry.correct}
+                    <span className="text-muted-foreground/50">
+                      /{entry.predictionsScored}
+                    </span>
                   </td>
                   <td className="px-5 py-4 text-right font-display text-2xl text-accent tabular-nums">
                     {entry.points}

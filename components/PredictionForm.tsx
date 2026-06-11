@@ -6,16 +6,15 @@ import type { Match } from "@/types";
 import { getTeam } from "@/lib/data/teams";
 import { LocalTime } from "@/components/LocalTime";
 import { useAuth } from "@/lib/supabase/auth";
-import { scorePrediction, type Outcome } from "@/lib/scoring";
+import { scorePick, winnerOf, type Outcome, type Pick } from "@/lib/scoring";
 import { type ResultMap, fetchResults } from "@/lib/results";
 import {
-  type ScoreMap,
+  type PickMap,
   clearLocal,
   deleteAllRemote,
   deleteRemote,
   fetchRemote,
-  hasAnyFilled,
-  isFilled,
+  hasAnyPick,
   loadLocal,
   migrateLocalToRemote,
   saveLocal,
@@ -30,42 +29,41 @@ interface Props {
 
 export function PredictionForm({ matches }: Props) {
   const { loading: authLoading, user } = useAuth();
-  const [predictions, setPredictions] = useState<ScoreMap>({});
+  const [picks, setPicks] = useState<PickMap>({});
   const [results, setResults] = useState<ResultMap>({});
   const [hydrated, setHydrated] = useState(false);
   const [status, setStatus] = useState<SyncStatus>("idle");
-  const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
   const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // Carga inicial: desde Supabase si hay sesión (migrando lo local la primera
-  // vez), o desde localStorage si se juega sin cuenta.
+  // vez), o desde localStorage si se juega sin cuenta. Los resultados son
+  // públicos y se cargan siempre.
   useEffect(() => {
     let active = true;
     async function load() {
       if (authLoading) return;
-      // Los resultados reales son públicos: se cargan haya sesión o no.
       try {
         const res = await fetchResults();
         if (active) setResults(res);
       } catch {
-        // si fallan los resultados, seguimos solo con las predicciones
+        // seguimos sin resultados
       }
       if (user) {
         try {
           const remote = await fetchRemote(user.id);
           const local = loadLocal();
-          if (Object.keys(remote).length === 0 && hasAnyFilled(local)) {
+          if (Object.keys(remote).length === 0 && hasAnyPick(local)) {
             await migrateLocalToRemote(user.id, local);
             clearLocal();
-            if (active) setPredictions(local);
+            if (active) setPicks(local);
           } else if (active) {
-            setPredictions(remote);
+            setPicks(remote);
           }
         } catch {
           if (active) setStatus("error");
         }
       } else if (active) {
-        setPredictions(loadLocal());
+        setPicks(loadLocal());
       }
       if (active) setHydrated(true);
     }
@@ -75,63 +73,39 @@ export function PredictionForm({ matches }: Props) {
     };
   }, [user, authLoading]);
 
-  // Guarda un partido concreto (con rebote) en la base de datos.
   const scheduleRemoteSync = useCallback(
-    (matchId: string, score: { home: string; away: string }) => {
+    (matchId: string, pick: Pick | null) => {
       if (!user) return;
       clearTimeout(timersRef.current[matchId]);
       setStatus("saving");
       timersRef.current[matchId] = setTimeout(async () => {
         try {
-          if (isFilled(score)) {
-            await upsertRemote(
-              user.id,
-              matchId,
-              Number(score.home),
-              Number(score.away),
-            );
-          } else {
-            await deleteRemote(user.id, matchId);
-          }
+          if (pick) await upsertRemote(user.id, matchId, pick);
+          else await deleteRemote(user.id, matchId);
           setStatus("saved");
         } catch {
           setStatus("error");
         }
-      }, 600);
+      }, 500);
     },
     [user],
   );
 
-  function updateScore(
-    matchId: string,
-    side: "home" | "away",
-    value: string,
-    inputIndex: number,
-  ) {
-    const sanitized = value.replace(/[^0-9]/g, "").slice(0, 2);
-    const previous = predictions[matchId]?.[side] ?? "";
-    const score = {
-      home: side === "home" ? sanitized : predictions[matchId]?.home ?? "",
-      away: side === "away" ? sanitized : predictions[matchId]?.away ?? "",
-    };
-    const next = { ...predictions, [matchId]: score };
-    setPredictions(next);
+  function choose(matchId: string, pick: Pick) {
+    // Volver a pulsar la opción ya elegida la deselecciona.
+    const nextPick = picks[matchId] === pick ? null : pick;
+    const next = { ...picks };
+    if (nextPick) next[matchId] = nextPick;
+    else delete next[matchId];
+    setPicks(next);
 
-    if (user) {
-      scheduleRemoteSync(matchId, score);
-    } else {
-      saveLocal(next);
-    }
-
-    // Salta al siguiente campo al teclear un dígito (no al borrar).
-    if (sanitized.length > previous.length) {
-      inputsRef.current[inputIndex + 1]?.focus();
-    }
+    if (user) scheduleRemoteSync(matchId, nextPick);
+    else saveLocal(next);
   }
 
   async function handleReset() {
-    if (!confirm("¿Borrar todas las predicciones?")) return;
-    setPredictions({});
+    if (!confirm("¿Borrar todos los pronósticos?")) return;
+    setPicks({});
     if (user) {
       setStatus("saving");
       try {
@@ -145,9 +119,7 @@ export function PredictionForm({ matches }: Props) {
     }
   }
 
-  const completed = hydrated
-    ? Object.values(predictions).filter(isFilled).length
-    : 0;
+  const completed = Object.keys(picks).length;
   const progress = matches.length > 0 ? (completed / matches.length) * 100 : 0;
 
   if (!hydrated) {
@@ -156,11 +128,11 @@ export function PredictionForm({ matches }: Props) {
 
   return (
     <div>
-      {hydrated && !user && (
+      {!user && (
         <div className="bg-accent-soft border border-accent/30 rounded-2xl px-5 py-4 mb-6 text-sm flex items-center justify-between gap-4">
           <span>
-            Estás jugando <strong>sin cuenta</strong>. Tus predicciones se
-            guardan solo en este navegador.
+            Estás jugando <strong>sin cuenta</strong>. Tus pronósticos se guardan
+            solo en este navegador.
           </span>
           <Link
             href="/login"
@@ -175,7 +147,7 @@ export function PredictionForm({ matches }: Props) {
         <div className="flex items-baseline justify-between mb-3">
           <div>
             <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-1">
-              Progreso
+              Pronosticados
             </div>
             <div className="flex items-baseline gap-2">
               <span className="font-display text-4xl text-accent leading-none">
@@ -202,31 +174,34 @@ export function PredictionForm({ matches }: Props) {
             style={{ width: `${progress}%` }}
           />
         </div>
+        <p className="text-[11px] text-muted-foreground mt-3">
+          Elige <span className="text-foreground">quién gana</span> cada partido
+          (o empate). 1 punto por acierto.
+        </p>
       </div>
 
       <ul className="space-y-3">
-        {matches.map((match, matchIndex) => {
+        {matches.map((match) => {
           const home = getTeam(match.homeTeamId);
           const away = getTeam(match.awayTeamId);
-          const homeInputIndex = matchIndex * 2;
-          const p = predictions[match.id] ?? { home: "", away: "" };
-          const filled = isFilled(p);
+          const pick = picks[match.id] ?? null;
           const result = results[match.id];
-          const finished = Boolean(result && isFilled(result));
-          const scored = finished && filled ? scorePrediction(p, result!) : null;
+          const finished = Boolean(
+            result && result.home !== "" && result.away !== "",
+          );
+          const actual = finished
+            ? winnerOf(Number(result!.home), Number(result!.away))
+            : null;
+          const scored = finished && pick ? scorePick(pick, result!) : null;
 
           return (
             <li
               key={match.id}
               className={`bg-surface border rounded-2xl p-4 sm:p-5 transition-colors ${
-                finished
-                  ? "border-border"
-                  : filled
-                    ? "border-accent/60"
-                    : "border-border"
+                pick && !finished ? "border-accent/60" : "border-border"
               }`}
             >
-              <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground mb-4 flex justify-between font-semibold">
+              <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground mb-3 flex justify-between font-semibold">
                 <span>
                   Grupo {match.group} · J{match.matchday}
                 </span>
@@ -234,62 +209,38 @@ export function PredictionForm({ matches }: Props) {
                   <LocalTime iso={match.kickoff} />
                 </span>
               </div>
-              <div className="grid grid-cols-[1fr_auto_1fr] gap-3 sm:gap-4 items-center">
-                <div className="flex items-center gap-2 justify-end">
-                  <span className="font-semibold tracking-tight truncate text-sm sm:text-base">
-                    {home?.name}
-                  </span>
-                  <span className="text-2xl shrink-0" aria-hidden>
-                    {home?.flag}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    ref={(el) => {
-                      inputsRef.current[homeInputIndex] = el;
-                    }}
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={p.home}
-                    onChange={(e) =>
-                      updateScore(match.id, "home", e.target.value, homeInputIndex)
-                    }
-                    disabled={finished}
-                    className="w-12 h-12 sm:w-14 sm:h-14 text-center font-display text-2xl sm:text-3xl bg-background border border-border rounded-xl focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    placeholder="—"
-                    aria-label={`Goles de ${home?.name}`}
-                  />
-                  <span className="text-muted-foreground text-xs font-mono">vs</span>
-                  <input
-                    ref={(el) => {
-                      inputsRef.current[homeInputIndex + 1] = el;
-                    }}
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={p.away}
-                    onChange={(e) =>
-                      updateScore(match.id, "away", e.target.value, homeInputIndex + 1)
-                    }
-                    disabled={finished}
-                    className="w-12 h-12 sm:w-14 sm:h-14 text-center font-display text-2xl sm:text-3xl bg-background border border-border rounded-xl focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    placeholder="—"
-                    aria-label={`Goles de ${away?.name}`}
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl shrink-0" aria-hidden>
-                    {away?.flag}
-                  </span>
-                  <span className="font-semibold tracking-tight truncate text-sm sm:text-base">
-                    {away?.name}
-                  </span>
-                </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <PickButton
+                  selected={pick === "home"}
+                  correct={actual === "home"}
+                  finished={finished}
+                  onClick={() => choose(match.id, "home")}
+                  flag={home?.flag}
+                  label={home?.name ?? "Local"}
+                  sub="Gana"
+                />
+                <PickButton
+                  selected={pick === "draw"}
+                  correct={actual === "draw"}
+                  finished={finished}
+                  onClick={() => choose(match.id, "draw")}
+                  label="Empate"
+                  sub="X"
+                />
+                <PickButton
+                  selected={pick === "away"}
+                  correct={actual === "away"}
+                  finished={finished}
+                  onClick={() => choose(match.id, "away")}
+                  flag={away?.flag}
+                  label={away?.name ?? "Visitante"}
+                  sub="Gana"
+                />
               </div>
 
               {finished && (
-                <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between gap-3 text-xs">
+                <div className="mt-3 pt-3 border-t border-border/60 flex items-center justify-between gap-3 text-xs">
                   <span className="text-muted-foreground">
                     Resultado final:{" "}
                     <span className="font-mono text-foreground font-semibold">
@@ -299,7 +250,7 @@ export function PredictionForm({ matches }: Props) {
                   {scored ? (
                     <OutcomeBadge outcome={scored.outcome} points={scored.points} />
                   ) : (
-                    <span className="text-muted-foreground/70">Sin predicción</span>
+                    <span className="text-muted-foreground/70">Sin pronóstico</span>
                   )}
                 </div>
               )}
@@ -308,6 +259,56 @@ export function PredictionForm({ matches }: Props) {
         })}
       </ul>
     </div>
+  );
+}
+
+function PickButton({
+  selected,
+  correct,
+  finished,
+  onClick,
+  flag,
+  label,
+  sub,
+}: {
+  selected: boolean;
+  correct: boolean;
+  finished: boolean;
+  onClick: () => void;
+  flag?: string;
+  label: string;
+  sub: string;
+}) {
+  // Resalta en verde el ganador real cuando el partido ya terminó.
+  const base =
+    "flex flex-col items-center justify-center gap-1 rounded-xl border px-2 py-3 text-center transition-all min-h-[4.5rem]";
+  const state = finished
+    ? correct
+      ? "border-accent bg-accent-soft"
+      : selected
+        ? "border-pink/50 bg-pink/10"
+        : "border-border opacity-60"
+    : selected
+      ? "border-accent bg-accent text-accent-foreground"
+      : "border-border hover:border-border-strong hover:bg-surface-muted";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={finished}
+      className={`${base} ${state} disabled:cursor-not-allowed`}
+    >
+      {flag && (
+        <span className="text-xl leading-none" aria-hidden>
+          {flag}
+        </span>
+      )}
+      <span className="text-xs font-semibold tracking-tight leading-tight line-clamp-2">
+        {label}
+      </span>
+      <span className="text-[9px] uppercase tracking-wider opacity-70">{sub}</span>
+    </button>
   );
 }
 
@@ -334,8 +335,7 @@ function SyncBadge({ status }: { status: SyncStatus }) {
 
 function OutcomeBadge({ outcome, points }: { outcome: Outcome; points: number }) {
   const config = {
-    exact: { label: "¡Marcador exacto!", cls: "bg-accent text-accent-foreground" },
-    outcome: { label: "Acertaste el resultado", cls: "bg-cyan/20 text-cyan" },
+    correct: { label: "Acertaste", cls: "bg-accent text-accent-foreground" },
     miss: { label: "Fallaste", cls: "bg-surface-muted text-muted-foreground" },
   }[outcome];
 
@@ -354,7 +354,7 @@ function OutcomeBadge({ outcome, points }: { outcome: Outcome; points: number })
 function PredictionsSkeleton({ rows }: { rows: number }) {
   return (
     <div className="animate-pulse">
-      <div className="bg-surface border border-border rounded-2xl p-5 mb-8 h-20" />
+      <div className="bg-surface border border-border rounded-2xl p-5 mb-8 h-24" />
       <ul className="space-y-3">
         {Array.from({ length: Math.max(rows, 3) }).map((_, i) => (
           <li
