@@ -6,6 +6,8 @@ import type { Match } from "@/types";
 import { getTeam } from "@/lib/data/teams";
 import { LocalTime } from "@/components/LocalTime";
 import { useAuth } from "@/lib/supabase/auth";
+import { scorePrediction, type Outcome } from "@/lib/scoring";
+import { type ResultMap, fetchResults } from "@/lib/results";
 import {
   type ScoreMap,
   clearLocal,
@@ -29,6 +31,7 @@ interface Props {
 export function PredictionForm({ matches }: Props) {
   const { loading: authLoading, user } = useAuth();
   const [predictions, setPredictions] = useState<ScoreMap>({});
+  const [results, setResults] = useState<ResultMap>({});
   const [hydrated, setHydrated] = useState(false);
   const [status, setStatus] = useState<SyncStatus>("idle");
   const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
@@ -40,6 +43,13 @@ export function PredictionForm({ matches }: Props) {
     let active = true;
     async function load() {
       if (authLoading) return;
+      // Los resultados reales son públicos: se cargan haya sesión o no.
+      try {
+        const res = await fetchResults();
+        if (active) setResults(res);
+      } catch {
+        // si fallan los resultados, seguimos solo con las predicciones
+      }
       if (user) {
         try {
           const remote = await fetchRemote(user.id);
@@ -140,6 +150,10 @@ export function PredictionForm({ matches }: Props) {
     : 0;
   const progress = matches.length > 0 ? (completed / matches.length) * 100 : 0;
 
+  if (!hydrated) {
+    return <PredictionsSkeleton rows={Math.min(matches.length, 6)} />;
+  }
+
   return (
     <div>
       {hydrated && !user && (
@@ -197,12 +211,19 @@ export function PredictionForm({ matches }: Props) {
           const homeInputIndex = matchIndex * 2;
           const p = predictions[match.id] ?? { home: "", away: "" };
           const filled = isFilled(p);
+          const result = results[match.id];
+          const finished = Boolean(result && isFilled(result));
+          const scored = finished && filled ? scorePrediction(p, result!) : null;
 
           return (
             <li
               key={match.id}
               className={`bg-surface border rounded-2xl p-4 sm:p-5 transition-colors ${
-                filled ? "border-accent/60" : "border-border"
+                finished
+                  ? "border-border"
+                  : filled
+                    ? "border-accent/60"
+                    : "border-border"
               }`}
             >
               <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground mb-4 flex justify-between font-semibold">
@@ -234,7 +255,8 @@ export function PredictionForm({ matches }: Props) {
                     onChange={(e) =>
                       updateScore(match.id, "home", e.target.value, homeInputIndex)
                     }
-                    className="w-12 h-12 sm:w-14 sm:h-14 text-center font-display text-2xl sm:text-3xl bg-background border border-border rounded-xl focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/30 transition-all"
+                    disabled={finished}
+                    className="w-12 h-12 sm:w-14 sm:h-14 text-center font-display text-2xl sm:text-3xl bg-background border border-border rounded-xl focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     placeholder="—"
                     aria-label={`Goles de ${home?.name}`}
                   />
@@ -250,7 +272,8 @@ export function PredictionForm({ matches }: Props) {
                     onChange={(e) =>
                       updateScore(match.id, "away", e.target.value, homeInputIndex + 1)
                     }
-                    className="w-12 h-12 sm:w-14 sm:h-14 text-center font-display text-2xl sm:text-3xl bg-background border border-border rounded-xl focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/30 transition-all"
+                    disabled={finished}
+                    className="w-12 h-12 sm:w-14 sm:h-14 text-center font-display text-2xl sm:text-3xl bg-background border border-border rounded-xl focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     placeholder="—"
                     aria-label={`Goles de ${away?.name}`}
                   />
@@ -264,6 +287,22 @@ export function PredictionForm({ matches }: Props) {
                   </span>
                 </div>
               </div>
+
+              {finished && (
+                <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between gap-3 text-xs">
+                  <span className="text-muted-foreground">
+                    Resultado final:{" "}
+                    <span className="font-mono text-foreground font-semibold">
+                      {result!.home}–{result!.away}
+                    </span>
+                  </span>
+                  {scored ? (
+                    <OutcomeBadge outcome={scored.outcome} points={scored.points} />
+                  ) : (
+                    <span className="text-muted-foreground/70">Sin predicción</span>
+                  )}
+                </div>
+              )}
             </li>
           );
         })}
@@ -290,5 +329,40 @@ function SyncBadge({ status }: { status: SyncStatus }) {
     >
       {label}
     </span>
+  );
+}
+
+function OutcomeBadge({ outcome, points }: { outcome: Outcome; points: number }) {
+  const config = {
+    exact: { label: "¡Marcador exacto!", cls: "bg-accent text-accent-foreground" },
+    outcome: { label: "Acertaste el resultado", cls: "bg-cyan/20 text-cyan" },
+    miss: { label: "Fallaste", cls: "bg-surface-muted text-muted-foreground" },
+  }[outcome];
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-semibold ${config.cls}`}
+    >
+      {config.label}
+      <span className="font-mono">
+        {points > 0 ? `+${points}` : points} pt{points === 1 ? "" : "s"}
+      </span>
+    </span>
+  );
+}
+
+function PredictionsSkeleton({ rows }: { rows: number }) {
+  return (
+    <div className="animate-pulse">
+      <div className="bg-surface border border-border rounded-2xl p-5 mb-8 h-20" />
+      <ul className="space-y-3">
+        {Array.from({ length: Math.max(rows, 3) }).map((_, i) => (
+          <li
+            key={i}
+            className="bg-surface border border-border rounded-2xl p-4 sm:p-5 h-28"
+          />
+        ))}
+      </ul>
+    </div>
   );
 }
