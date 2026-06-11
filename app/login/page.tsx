@@ -72,8 +72,8 @@ export default function LoginPage() {
         <div className="text-center mb-8">
           <div className="font-display text-5xl text-accent mb-2">⚽</div>
           <h1 className="text-3xl font-bold tracking-tight">
-            {mode === "signin" ? "Entrar al " : "Únete al "}
-            <span className="font-display text-accent">Mundial.</span>
+            {mode === "signin" ? "Entrar a " : "Únete a "}
+            <span className="font-display text-accent">Mundialistas2026.</span>
           </h1>
           <p className="text-muted-foreground mt-2 text-sm">
             {mode === "signin"

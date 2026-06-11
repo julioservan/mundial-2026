@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { Avatar } from "@/components/Avatar";
+import { useAuth } from "@/lib/supabase/auth";
 import { fetchLeaderboard, type LiveLeaderboardEntry } from "@/lib/leaderboard";
 
 const MEDAL_COLORS = ["text-accent", "text-cyan", "text-pink"];
 
 export default function LeaderboardPage() {
+  const { user } = useAuth();
   const [entries, setEntries] = useState<LiveLeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -67,10 +69,14 @@ export default function LeaderboardPage() {
               </tr>
             </thead>
             <tbody>
-              {entries.map((entry, idx) => (
+              {entries.map((entry, idx) => {
+                const isMe = user?.id === entry.userId;
+                return (
                 <tr
                   key={entry.userId}
-                  className="border-t border-border/60 hover:bg-surface-muted/40"
+                  className={`border-t border-border/60 ${
+                    isMe ? "bg-accent-soft" : "hover:bg-surface-muted/40"
+                  }`}
                 >
                   <td className="px-5 py-4">
                     <span
@@ -92,6 +98,11 @@ export default function LeaderboardPage() {
                       <span className="font-semibold tracking-tight truncate">
                         {entry.username}
                       </span>
+                      {isMe && (
+                        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-accent border border-accent/40 rounded-full px-2 py-0.5">
+                          Tú
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="px-3 py-4 text-center tabular-nums text-muted-foreground">
@@ -104,7 +115,8 @@ export default function LeaderboardPage() {
                     {entry.points}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

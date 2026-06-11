@@ -2,7 +2,7 @@ import { PredictionForm } from "@/components/PredictionForm";
 import { GROUP_MATCHES } from "@/lib/data/matches";
 
 export const metadata = {
-  title: "Mis predicciones · Mundial 2026",
+  title: "Mis predicciones · Mundialistas2026",
 };
 
 export default function PredictionsPage() {

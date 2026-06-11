@@ -19,7 +19,7 @@ export function Navbar() {
             <span className="absolute inset-0 rounded-full pulse-ring" aria-hidden />
           </span>
           <span className="font-semibold tracking-tight text-base">
-            Mundial<span className="font-display not-italic text-accent">26</span>
+            Mundialistas<span className="font-display not-italic text-accent">2026</span>
           </span>
         </Link>
 
@@ -39,7 +39,7 @@ export function Navbar() {
       </div>
 
       <nav className="md:hidden border-t border-border overflow-x-auto">
-        <div className="flex gap-1 px-4 py-2 min-w-max">
+        <div className="flex items-center gap-1 px-4 py-2 min-w-max">
           {LINKS.map((link) => (
             <Link
               key={link.href}
@@ -49,6 +49,8 @@ export function Navbar() {
               {link.label}
             </Link>
           ))}
+          <span className="w-px h-4 bg-border mx-1" aria-hidden />
+          <AuthNav variant="mobile" />
         </div>
       </nav>
     </header>

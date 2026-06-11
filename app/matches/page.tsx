@@ -2,7 +2,7 @@ import { MatchesView } from "@/components/MatchesView";
 import { MATCHES } from "@/lib/data/matches";
 
 export const metadata = {
-  title: "Calendario de partidos · Mundial 2026",
+  title: "Calendario de partidos · Mundialistas2026",
 };
 
 export default function MatchesPage() {

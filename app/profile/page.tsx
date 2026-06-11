@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/supabase/auth";
 import { getSupabase } from "@/lib/supabase/client";
 import { Avatar } from "@/components/Avatar";
 import { TIMEZONES } from "@/lib/timezones";
+import { fetchLeaderboard } from "@/lib/leaderboard";
 
 const AVATAR_BUCKET = "mundial-avatars";
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2 MB
@@ -26,10 +27,43 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [stats, setStats] = useState<{
+    rank: number;
+    points: number;
+    exact: number;
+    correct: number;
+  } | null>(null);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/login");
   }, [loading, user, router]);
+
+  // Carga el puesto y puntos del usuario en el ranking.
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      if (!user) return;
+      try {
+        const board = await fetchLeaderboard();
+        const idx = board.findIndex((e) => e.userId === user.id);
+        if (active && idx >= 0) {
+          const me = board[idx];
+          setStats({
+            rank: idx + 1,
+            points: me.points,
+            exact: me.exactScores,
+            correct: me.correctOutcomes,
+          });
+        }
+      } catch {
+        // sin stats, no pasa nada
+      }
+    }
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [user]);
 
   async function handleAvatar(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -131,6 +165,20 @@ export default function ProfilePage() {
           </span>
         </h1>
       </header>
+
+      {stats && (
+        <Link
+          href="/leaderboard"
+          className="block bg-surface border border-border rounded-2xl p-5 mb-4 hover:border-accent/40 transition-colors"
+        >
+          <div className="grid grid-cols-4 gap-2 text-center">
+            <Stat value={`#${stats.rank}`} label="Puesto" highlight />
+            <Stat value={stats.points} label="Puntos" highlight />
+            <Stat value={stats.exact} label="Exactos" />
+            <Stat value={stats.correct} label="Resultados" />
+          </div>
+        </Link>
+      )}
 
       <div className="bg-surface border border-border rounded-2xl p-6 sm:p-8">
         <div className="flex items-center gap-4 mb-6">
@@ -246,6 +294,31 @@ export default function ProfilePage() {
       >
         Cerrar sesión
       </button>
+    </div>
+  );
+}
+
+function Stat({
+  value,
+  label,
+  highlight,
+}: {
+  value: string | number;
+  label: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div>
+      <div
+        className={`font-display text-2xl sm:text-3xl leading-none ${
+          highlight ? "text-accent" : "text-foreground"
+        }`}
+      >
+        {value}
+      </div>
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1">
+        {label}
+      </div>
     </div>
   );
 }

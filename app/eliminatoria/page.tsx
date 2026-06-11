@@ -2,7 +2,7 @@ import { KnockoutBracket } from "@/components/KnockoutBracket";
 import { KNOCKOUT_MATCHES } from "@/lib/data/matches";
 
 export const metadata = {
-  title: "Eliminatoria · Mundial 2026",
+  title: "Eliminatoria · Mundialistas2026",
 };
 
 const ROUNDS_SUMMARY = [
