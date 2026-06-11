@@ -89,10 +89,10 @@ export default function HomePage() {
                 <span aria-hidden>🇲🇽</span>
                 <span>MEX</span>
                 <span className="font-mono">vs</span>
-                <span aria-hidden>🇳🇴</span>
-                <span>NOR</span>
+                <span aria-hidden>🇿🇦</span>
+                <span>RSA</span>
                 <span className="text-muted-foreground/50">·</span>
-                <span>Partido inaugural</span>
+                <span>Partido inaugural · 11 jun · Azteca</span>
               </div>
             </div>
           </div>
