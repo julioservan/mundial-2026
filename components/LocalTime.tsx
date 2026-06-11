@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@/lib/supabase/auth";
-import { deviceTimezone } from "@/lib/timezones";
+import { deviceTimezone, timezoneCity } from "@/lib/timezones";
 import { formatMatchDate, formatMatchTime } from "@/lib/utils/format";
 
 interface Props {
@@ -12,17 +12,20 @@ interface Props {
   showZone?: boolean;
 }
 
-// Abreviatura del huso horario para una fecha y zona (p. ej. "GMT+2", "CEST").
-function zoneAbbr(iso: string, timeZone: string): string {
+// Etiqueta de zona: ciudad + huso (p. ej. "Nueva York EDT", "Madrid GMT+2").
+// Se usa locale en-US para el huso porque da abreviaturas tipo EDT/PDT en EE. UU.
+function zoneLabel(iso: string, timeZone: string): string {
+  const city = timezoneCity(timeZone);
   try {
-    const parts = new Intl.DateTimeFormat("es-ES", {
+    const parts = new Intl.DateTimeFormat("en-US", {
       timeZone,
       hour: "2-digit",
       timeZoneName: "short",
     }).formatToParts(new Date(iso));
-    return parts.find((p) => p.type === "timeZoneName")?.value ?? "";
+    const abbr = parts.find((p) => p.type === "timeZoneName")?.value ?? "";
+    return abbr ? `${city} ${abbr}` : city;
   } catch {
-    return "";
+    return city;
   }
 }
 
@@ -43,7 +46,7 @@ export function LocalTime({ iso, mode = "datetime", showZone = true }: Props) {
   }
 
   // La zona solo tiene sentido cuando se muestra una hora.
-  const zone = mode === "date" || !showZone ? "" : zoneAbbr(iso, tz);
+  const zone = mode === "date" || !showZone ? "" : zoneLabel(iso, tz);
 
   return (
     <span suppressHydrationWarning>

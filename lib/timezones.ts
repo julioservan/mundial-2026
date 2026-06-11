@@ -28,3 +28,33 @@ export function deviceTimezone(): string {
     return "UTC";
   }
 }
+
+// Nombre de ciudad/lugar legible para una IANA Time Zone (en español).
+const TZ_CITY: Record<string, string> = {
+  "Europe/Madrid": "Madrid",
+  "Atlantic/Canary": "Canarias",
+  "Europe/London": "Londres",
+  "Europe/Lisbon": "Lisboa",
+  "Europe/Paris": "París",
+  "Europe/Berlin": "Berlín",
+  "Europe/Rome": "Roma",
+  "America/Mexico_City": "Ciudad de México",
+  "America/Monterrey": "Monterrey",
+  "America/Bogota": "Bogotá",
+  "America/Lima": "Lima",
+  "America/Argentina/Buenos_Aires": "Buenos Aires",
+  "America/Santiago": "Santiago",
+  "America/New_York": "Nueva York",
+  "America/Chicago": "Chicago",
+  "America/Denver": "Denver",
+  "America/Los_Angeles": "Los Ángeles",
+  "America/Toronto": "Toronto",
+  "America/Vancouver": "Vancouver",
+};
+
+export function timezoneCity(tz: string): string {
+  if (TZ_CITY[tz]) return TZ_CITY[tz];
+  // Fallback: último segmento de la IANA tz ("Europe/Madrid" -> "Madrid").
+  const last = tz.split("/").pop() ?? tz;
+  return last.replace(/_/g, " ");
+}
