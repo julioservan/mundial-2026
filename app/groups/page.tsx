@@ -1,7 +1,7 @@
 import { GROUPS, teamsByGroup } from "@/lib/data/teams";
 
 export const metadata = {
-  title: "Grupos · Mundial 2026",
+  title: "Grupos · Mundialistas2026",
 };
 
 const GROUP_TINTS = [

@@ -19,7 +19,7 @@ export function Navbar() {
             <span className="absolute inset-0 rounded-full pulse-ring" aria-hidden />
           </span>
           <span className="font-semibold tracking-tight text-base">
-            Mundial<span className="font-display not-italic text-accent">26</span>
+            Mundialistas<span className="font-display not-italic text-accent">2026</span>
           </span>
         </Link>
 

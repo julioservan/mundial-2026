@@ -23,9 +23,9 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "Mundial 2026 — Quiniela",
+  title: "Mundialistas2026 — Quiniela",
   description:
-    "Quiniela de predicciones para el Mundial 2026. USA · Canadá · México.",
+    "Mundialistas2026: la quiniela para predecir el Mundial 2026. USA · Canadá · México.",
 };
 
 export default function RootLayout({

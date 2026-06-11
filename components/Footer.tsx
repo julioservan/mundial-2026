@@ -5,7 +5,7 @@ export function Footer() {
         <div className="flex flex-col md:flex-row gap-6 md:gap-2 justify-between items-start md:items-center">
           <div>
             <p className="font-display text-3xl text-accent leading-none">
-              Mundial<span className="not-italic font-sans font-bold">26</span>
+              Mundialistas<span className="not-italic font-sans font-bold">2026</span>
             </p>
             <p className="text-xs text-muted-foreground mt-2 tracking-wide uppercase">
               11 jun → 19 jul · USA · CAN · MEX
