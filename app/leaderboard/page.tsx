@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
 import { useAuth } from "@/lib/supabase/auth";
 import { fetchLeaderboard, type LiveLeaderboardEntry } from "@/lib/leaderboard";
@@ -86,14 +87,17 @@ export default function LeaderboardPage() {
                     </span>
                   </td>
                   <td className="px-5 py-4">
-                    <div className="flex items-center gap-3">
+                    <Link
+                      href={`/players/${entry.userId}`}
+                      className="flex items-center gap-3 group/row"
+                    >
                       <Avatar
                         url={entry.avatarUrl}
                         name={entry.username}
                         size={32}
                         className="text-sm shrink-0"
                       />
-                      <span className="font-semibold tracking-tight truncate">
+                      <span className="font-semibold tracking-tight truncate group-hover/row:text-accent transition-colors">
                         {entry.username}
                       </span>
                       {isMe && (
@@ -101,7 +105,7 @@ export default function LeaderboardPage() {
                           Tú
                         </span>
                       )}
-                    </div>
+                    </Link>
                   </td>
                   <td className="px-3 py-4 text-center tabular-nums text-muted-foreground">
                     {entry.correct}

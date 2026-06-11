@@ -34,7 +34,17 @@ export function PredictionForm({ matches }: Props) {
   const [hydrated, setHydrated] = useState(false);
   const [status, setStatus] = useState<SyncStatus>("idle");
   const [now, setNow] = useState(() => Date.now());
+  const [activeMd, setActiveMd] = useState(1);
   const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  // Jornadas presentes (1, 2, 3…).
+  const matchdays = useMemo(
+    () =>
+      Array.from(new Set(matches.map((m) => m.matchday ?? 1))).sort(
+        (a, b) => a - b,
+      ),
+    [matches],
+  );
 
   // Reloj: refresca cada 30 s para bloquear los partidos al empezar sin recargar.
   useEffect(() => {
@@ -155,6 +165,11 @@ export function PredictionForm({ matches }: Props) {
 
   const completed = Object.keys(picks).length;
   const progress = matches.length > 0 ? (completed / matches.length) * 100 : 0;
+  const visibleMatches = matches.filter((m) => (m.matchday ?? 1) === activeMd);
+  const mdPicked = (md: number) =>
+    matches.filter((m) => (m.matchday ?? 1) === md && picks[m.id]).length;
+  const mdTotal = (md: number) =>
+    matches.filter((m) => (m.matchday ?? 1) === md).length;
 
   if (!hydrated) {
     return <PredictionsSkeleton rows={Math.min(matches.length, 6)} />;
@@ -214,8 +229,32 @@ export function PredictionForm({ matches }: Props) {
         </p>
       </div>
 
+      {/* Pestañas por jornada */}
+      <div className="flex gap-2 mb-5 overflow-x-auto">
+        {matchdays.map((md) => (
+          <button
+            key={md}
+            onClick={() => setActiveMd(md)}
+            className={`shrink-0 px-4 py-2 rounded-full text-sm font-semibold border transition-colors ${
+              activeMd === md
+                ? "border-accent bg-accent text-accent-foreground"
+                : "border-border text-muted-foreground hover:bg-surface-muted"
+            }`}
+          >
+            Jornada {md}
+            <span
+              className={`ml-1.5 text-xs ${
+                activeMd === md ? "opacity-80" : "opacity-60"
+              }`}
+            >
+              {mdPicked(md)}/{mdTotal(md)}
+            </span>
+          </button>
+        ))}
+      </div>
+
       <ul className="space-y-3">
-        {matches.map((match) => {
+        {visibleMatches.map((match) => {
           const home = getTeam(match.homeTeamId);
           const away = getTeam(match.awayTeamId);
           const pick = picks[match.id] ?? null;
