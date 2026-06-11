@@ -33,7 +33,14 @@ export function PredictionForm({ matches }: Props) {
   const [results, setResults] = useState<ResultMap>({});
   const [hydrated, setHydrated] = useState(false);
   const [status, setStatus] = useState<SyncStatus>("idle");
+  const [now, setNow] = useState(() => Date.now());
   const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  // Reloj: refresca cada 30 s para bloquear los partidos al empezar sin recargar.
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   // Conjunto de IDs de partido válidos en el calendario actual.
   const validIds = useMemo(() => new Set(matches.map((m) => m.id)), [matches]);
@@ -115,6 +122,10 @@ export function PredictionForm({ matches }: Props) {
   );
 
   function choose(matchId: string, pick: Pick) {
+    // No se puede editar un partido ya empezado.
+    const match = matches.find((m) => m.id === matchId);
+    if (match && Date.parse(match.kickoff) <= now) return;
+
     // Volver a pulsar la opción ya elegida la deselecciona.
     const nextPick = picks[matchId] === pick ? null : pick;
     const next = { ...picks };
@@ -216,6 +227,9 @@ export function PredictionForm({ matches }: Props) {
             ? winnerOf(Number(result!.home), Number(result!.away))
             : null;
           const scored = finished && pick ? scorePick(pick, result!) : null;
+          // El partido ya empezó: no se puede editar.
+          const started = Date.parse(match.kickoff) <= now;
+          const locked = started || finished;
 
           return (
             <li
@@ -224,12 +238,17 @@ export function PredictionForm({ matches }: Props) {
                 pick && !finished ? "border-accent/60" : "border-border"
               }`}
             >
-              <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground mb-3 flex justify-between font-semibold">
+              <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground mb-3 flex justify-between gap-2 font-semibold">
                 <span>
                   Grupo {match.group} · J{match.matchday}
                 </span>
-                <span className="font-mono">
-                  <LocalTime iso={match.kickoff} />
+                <span className="flex items-center gap-2">
+                  {locked && !finished && (
+                    <span className="text-muted-foreground">🔒 Cerrado</span>
+                  )}
+                  <span className="font-mono">
+                    <LocalTime iso={match.kickoff} />
+                  </span>
                 </span>
               </div>
 
@@ -238,6 +257,7 @@ export function PredictionForm({ matches }: Props) {
                   selected={pick === "home"}
                   correct={actual === "home"}
                   finished={finished}
+                  locked={locked}
                   onClick={() => choose(match.id, "home")}
                   flag={home?.flag}
                   label={home?.name ?? "Local"}
@@ -247,6 +267,7 @@ export function PredictionForm({ matches }: Props) {
                   selected={pick === "draw"}
                   correct={actual === "draw"}
                   finished={finished}
+                  locked={locked}
                   onClick={() => choose(match.id, "draw")}
                   label="Empate"
                   sub="X"
@@ -255,6 +276,7 @@ export function PredictionForm({ matches }: Props) {
                   selected={pick === "away"}
                   correct={actual === "away"}
                   finished={finished}
+                  locked={locked}
                   onClick={() => choose(match.id, "away")}
                   flag={away?.flag}
                   label={away?.name ?? "Visitante"}
@@ -289,6 +311,7 @@ function PickButton({
   selected,
   correct,
   finished,
+  locked,
   onClick,
   flag,
   label,
@@ -297,6 +320,7 @@ function PickButton({
   selected: boolean;
   correct: boolean;
   finished: boolean;
+  locked: boolean;
   onClick: () => void;
   flag?: string;
   label: string;
@@ -311,15 +335,20 @@ function PickButton({
       : selected
         ? "border-pink/50 bg-pink/10"
         : "border-border opacity-60"
-    : selected
-      ? "border-accent bg-accent text-accent-foreground"
-      : "border-border hover:border-border-strong hover:bg-surface-muted";
+    : locked
+      ? // Empezado (sin resultado aún): muestra tu elección, sin poder editar.
+        selected
+        ? "border-accent bg-accent-soft"
+        : "border-border opacity-60"
+      : selected
+        ? "border-accent bg-accent text-accent-foreground"
+        : "border-border hover:border-border-strong hover:bg-surface-muted";
 
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={finished}
+      disabled={locked}
       className={`${base} ${state} disabled:cursor-not-allowed`}
     >
       {flag && (
