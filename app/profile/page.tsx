@@ -8,6 +8,7 @@ import { getSupabase } from "@/lib/supabase/client";
 import { Avatar } from "@/components/Avatar";
 import { TIMEZONES } from "@/lib/timezones";
 import { fetchLeaderboard } from "@/lib/leaderboard";
+import { levelLabel } from "@/lib/roles";
 
 const AVATAR_BUCKET = "mundial-avatars";
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2 MB
@@ -164,6 +165,15 @@ export default function ProfilePage() {
             {profile?.username ?? "jugador"}.
           </span>
         </h1>
+        <span
+          className={`inline-block mt-3 text-[10px] font-bold uppercase tracking-wider rounded-full px-2.5 py-1 border ${
+            profile?.is_admin
+              ? "text-accent border-accent/40 bg-accent-soft"
+              : "text-muted-foreground border-border"
+          }`}
+        >
+          Nivel: {levelLabel(profile?.is_admin)}
+        </span>
       </header>
 
       {stats && (
@@ -278,10 +288,10 @@ export default function ProfilePage() {
 
       {profile?.is_admin && (
         <Link
-          href="/admin/results"
+          href="/admin"
           className="mt-4 block text-center text-sm font-semibold text-accent hover:underline underline-offset-4"
         >
-          Panel de resultados (admin) →
+          Panel de administración →
         </Link>
       )}
 
