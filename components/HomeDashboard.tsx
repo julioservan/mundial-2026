@@ -306,16 +306,16 @@ function MatchRow({
             Nadie ha pronosticado este partido todavía.
           </p>
         ) : (
-          <div className="space-y-1.5">
-            <PickLine
-              label={home?.name ?? "Local"}
+          <div className="grid grid-cols-3 gap-2 items-start">
+            <PickGroup
+              label="Gana"
               flag={home?.flag}
               voters={byPick("home")}
               players={players}
             />
-            <PickLine label="Empate" voters={byPick("draw")} players={players} />
-            <PickLine
-              label={away?.name ?? "Visitante"}
+            <PickGroup label="Empate" voters={byPick("draw")} players={players} />
+            <PickGroup
+              label="Gana"
               flag={away?.flag}
               voters={byPick("away")}
               players={players}
@@ -327,7 +327,7 @@ function MatchRow({
   );
 }
 
-function PickLine({
+function PickGroup({
   label,
   flag,
   voters,
@@ -339,33 +339,37 @@ function PickLine({
   players: Record<string, PlayerLite>;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-      <span className="font-semibold text-foreground inline-flex items-center gap-1 shrink-0">
+    <div className="text-center">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 flex items-center justify-center gap-1">
         {flag && <span aria-hidden>{flag}</span>}
-        {label}
-        <span className="text-muted-foreground font-normal">({voters.length})</span>
-      </span>
-      {voters.length === 0 ? (
-        <span className="text-muted-foreground/50">—</span>
-      ) : (
-        voters.map((v) => {
-          const p = players[v.userId];
-          return (
-            <span
-              key={v.userId}
-              className="inline-flex items-center gap-1 text-muted-foreground bg-surface-muted/60 rounded-full pl-0.5 pr-2 py-0.5"
-            >
-              <Avatar
-                url={p?.avatar_url ?? null}
-                name={p?.username ?? "?"}
-                size={16}
-                className="text-[7px]"
-              />
-              {p?.username ?? "?"}
-            </span>
-          );
-        })
-      )}
+        <span>{label}</span>
+        <span className="text-foreground font-semibold">{voters.length}</span>
+      </div>
+      <div className="space-y-1">
+        {voters.length === 0 ? (
+          <span className="text-[11px] text-muted-foreground/40">—</span>
+        ) : (
+          voters.map((v) => {
+            const p = players[v.userId];
+            return (
+              <div
+                key={v.userId}
+                className="flex items-center gap-1.5 justify-center"
+              >
+                <Avatar
+                  url={p?.avatar_url ?? null}
+                  name={p?.username ?? "?"}
+                  size={18}
+                  className="text-[7px] shrink-0"
+                />
+                <span className="text-[11px] font-medium leading-tight">
+                  {p?.username ?? "?"}
+                </span>
+              </div>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }
