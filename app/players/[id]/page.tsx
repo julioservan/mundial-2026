@@ -26,7 +26,6 @@ export default function PlayerPredictionsPage() {
   const [results, setResults] = useState<ResultMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState(() => Date.now());
 
   const matchdays = useMemo(
     () =>
@@ -36,11 +35,6 @@ export default function PlayerPredictionsPage() {
     [],
   );
   const [activeMd, setActiveMd] = useState(1);
-
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(t);
-  }, []);
 
   useEffect(() => {
     let active = true;
@@ -125,10 +119,6 @@ export default function PlayerPredictionsPage() {
         </div>
       </header>
 
-      <p className="text-xs text-muted-foreground mb-5">
-        Los pronósticos de cada partido se revelan cuando el partido empieza.
-      </p>
-
       <div className="flex gap-2 mb-5 overflow-x-auto">
         {matchdays.map((md) => (
           <button
@@ -157,7 +147,6 @@ export default function PlayerPredictionsPage() {
           const actual = finished
             ? winnerOf(Number(result!.home), Number(result!.away))
             : null;
-          const started = Date.parse(match.kickoff) <= now;
           const scored = finished && pick ? scorePick(pick, result!) : null;
 
           return (
@@ -174,55 +163,36 @@ export default function PlayerPredictionsPage() {
                 </span>
               </div>
 
-              {!started ? (
-                <div className="text-sm text-muted-foreground text-center py-3 flex items-center justify-center gap-3">
-                  <span>
-                    {home?.flag} {home?.name}
-                  </span>
-                  <span className="text-muted-foreground/60">vs</span>
-                  <span>
-                    {away?.flag} {away?.name}
-                  </span>
-                  <span className="ml-2">🔒 Oculto</span>
-                </div>
-              ) : (
-                <div className="grid grid-cols-3 gap-2">
-                  <RevealChip
-                    label={home?.name ?? "Local"}
-                    flag={home?.flag}
-                    picked={pick === "home"}
-                    correct={actual === "home"}
-                    finished={finished}
-                  />
-                  <RevealChip
-                    label="Empate"
-                    picked={pick === "draw"}
-                    correct={actual === "draw"}
-                    finished={finished}
-                  />
-                  <RevealChip
-                    label={away?.name ?? "Visitante"}
-                    flag={away?.flag}
-                    picked={pick === "away"}
-                    correct={actual === "away"}
-                    finished={finished}
-                  />
-                </div>
-              )}
+              <div className="grid grid-cols-3 gap-2">
+                <RevealChip
+                  label={home?.name ?? "Local"}
+                  flag={home?.flag}
+                  picked={pick === "home"}
+                  correct={actual === "home"}
+                  finished={finished}
+                />
+                <RevealChip
+                  label="Empate"
+                  picked={pick === "draw"}
+                  correct={actual === "draw"}
+                  finished={finished}
+                />
+                <RevealChip
+                  label={away?.name ?? "Visitante"}
+                  flag={away?.flag}
+                  picked={pick === "away"}
+                  correct={actual === "away"}
+                  finished={finished}
+                />
+              </div>
 
-              {started && (
+              {finished && (
                 <div className="mt-3 pt-3 border-t border-border/60 flex items-center justify-between gap-3 text-xs">
                   <span className="text-muted-foreground">
-                    {finished ? (
-                      <>
-                        Resultado:{" "}
-                        <span className="font-mono text-foreground font-semibold">
-                          {result!.home}–{result!.away}
-                        </span>
-                      </>
-                    ) : (
-                      "En juego o pendiente de resultado"
-                    )}
+                    Resultado:{" "}
+                    <span className="font-mono text-foreground font-semibold">
+                      {result!.home}–{result!.away}
+                    </span>
                   </span>
                   {!pick ? (
                     <span className="text-muted-foreground/70">Sin pronóstico</span>

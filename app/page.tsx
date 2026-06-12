@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Countdown } from "@/components/Countdown";
 import { MatchCard } from "@/components/MatchCard";
 import { TeamMarquee } from "@/components/TeamMarquee";
+import { HomeSwitcher } from "@/components/HomeSwitcher";
 import { GROUP_MATCHES } from "@/lib/data/matches";
 
 const STATS = [
@@ -39,7 +40,8 @@ export default function HomePage() {
   const upcomingMatches = GROUP_MATCHES.slice(0, 6);
 
   return (
-    <div>
+    <HomeSwitcher>
+      <div>
       {/* HERO */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 grid-pattern opacity-50 pointer-events-none" />
@@ -190,6 +192,7 @@ export default function HomePage() {
           </div>
         </div>
       </section>
-    </div>
+      </div>
+    </HomeSwitcher>
   );
 }
