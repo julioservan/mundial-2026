@@ -306,15 +306,17 @@ function MatchRow({
             Nadie ha pronosticado este partido todavía.
           </p>
         ) : (
-          <div className="grid grid-cols-3 gap-2">
-            <PickGroup
+          <div className="space-y-1.5">
+            <PickLine
               label={home?.name ?? "Local"}
+              flag={home?.flag}
               voters={byPick("home")}
               players={players}
             />
-            <PickGroup label="Empate" voters={byPick("draw")} players={players} />
-            <PickGroup
+            <PickLine label="Empate" voters={byPick("draw")} players={players} />
+            <PickLine
               label={away?.name ?? "Visitante"}
+              flag={away?.flag}
               voters={byPick("away")}
               players={players}
             />
@@ -325,45 +327,45 @@ function MatchRow({
   );
 }
 
-function PickGroup({
+function PickLine({
   label,
+  flag,
   voters,
   players,
 }: {
   label: string;
+  flag?: string;
   voters: { userId: string }[];
   players: Record<string, PlayerLite>;
 }) {
-  const shown = voters.slice(0, 4);
-  const extra = voters.length - shown.length;
   return (
-    <div className="text-center">
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground truncate mb-1">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+      <span className="font-semibold text-foreground inline-flex items-center gap-1 shrink-0">
+        {flag && <span aria-hidden>{flag}</span>}
         {label}
-      </div>
-      <div className="font-display text-lg text-accent leading-none">
-        {voters.length}
-      </div>
-      <div className="flex items-center justify-center mt-1.5">
-        {shown.map((v, i) => {
+        <span className="text-muted-foreground font-normal">({voters.length})</span>
+      </span>
+      {voters.length === 0 ? (
+        <span className="text-muted-foreground/50">—</span>
+      ) : (
+        voters.map((v) => {
           const p = players[v.userId];
           return (
-            <span key={v.userId} className={i > 0 ? "-ml-1.5" : ""}>
+            <span
+              key={v.userId}
+              className="inline-flex items-center gap-1 text-muted-foreground bg-surface-muted/60 rounded-full pl-0.5 pr-2 py-0.5"
+            >
               <Avatar
                 url={p?.avatar_url ?? null}
                 name={p?.username ?? "?"}
-                size={20}
-                className="text-[8px] ring-1 ring-surface"
+                size={16}
+                className="text-[7px]"
               />
+              {p?.username ?? "?"}
             </span>
           );
-        })}
-        {extra > 0 && (
-          <span className="-ml-1.5 w-5 h-5 rounded-full bg-surface-muted text-[8px] font-bold flex items-center justify-center ring-1 ring-surface">
-            +{extra}
-          </span>
-        )}
-      </div>
+        })
+      )}
     </div>
   );
 }
