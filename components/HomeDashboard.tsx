@@ -7,6 +7,7 @@ import { getTeam } from "@/lib/data/teams";
 import { LocalTime } from "@/components/LocalTime";
 import { Avatar } from "@/components/Avatar";
 import { useAuth } from "@/lib/supabase/auth";
+import { deviceTimezone } from "@/lib/timezones";
 import { fetchResults, type ResultMap } from "@/lib/results";
 import { fetchLeaderboard, type LiveLeaderboardEntry } from "@/lib/leaderboard";
 
@@ -58,9 +59,24 @@ export function HomeDashboard() {
     return now >= k && now < k + LIVE_MS && !isFinished(m.id);
   });
 
-  const upcoming = PLAYABLE.filter((m) => Date.parse(m.kickoff) > now)
-    .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff))
-    .slice(0, 4);
+  // Si no hay partidos en juego, mostramos todos los del próximo día con
+  // partidos (en la zona horaria del usuario).
+  const tz = profile?.timezone || deviceTimezone();
+  const dayOf = (iso: string) =>
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(iso));
+
+  const allUpcoming = PLAYABLE.filter((m) => Date.parse(m.kickoff) > now).sort(
+    (a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff),
+  );
+  const nextDay = allUpcoming.length > 0 ? dayOf(allUpcoming[0].kickoff) : null;
+  const nextOfDay = nextDay
+    ? allUpcoming.filter((m) => dayOf(m.kickoff) === nextDay)
+    : [];
 
   const myIndex = board.findIndex((e) => e.userId === user?.id);
   const top = board.slice(0, 5);
@@ -102,21 +118,25 @@ export function HomeDashboard() {
               <MatchRow key={m.id} matchId={m.id} live />
             ))}
           </ul>
+        ) : nextOfDay.length > 0 ? (
+          <>
+            <div className="text-sm text-muted-foreground mb-3">
+              No hay partidos en juego. Los siguientes son el{" "}
+              <span className="text-foreground font-semibold">
+                <LocalTime iso={nextOfDay[0].kickoff} mode="date" />
+              </span>
+              :
+            </div>
+            <ul className="space-y-3">
+              {nextOfDay.map((m) => (
+                <MatchRow key={m.id} matchId={m.id} />
+              ))}
+            </ul>
+          </>
         ) : (
           <div className="bg-surface border border-border rounded-2xl p-5 text-sm text-muted-foreground">
-            No hay partidos en juego ahora mismo.
-            {upcoming.length > 0 && (
-              <span className="block mt-1">Estos son los próximos:</span>
-            )}
+            No hay más partidos programados.
           </div>
-        )}
-
-        {live.length === 0 && upcoming.length > 0 && (
-          <ul className="space-y-3 mt-3">
-            {upcoming.map((m) => (
-              <MatchRow key={m.id} matchId={m.id} />
-            ))}
-          </ul>
         )}
       </section>
 
@@ -124,12 +144,20 @@ export function HomeDashboard() {
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold tracking-tight">Clasificación</h2>
-          <Link
-            href="/leaderboard"
-            className="text-sm font-semibold text-accent hover:underline underline-offset-4"
-          >
-            Ver completa →
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              href="/players"
+              className="text-sm font-semibold text-accent hover:underline underline-offset-4"
+            >
+              Pronósticos de la gente
+            </Link>
+            <Link
+              href="/leaderboard"
+              className="text-sm font-semibold text-accent hover:underline underline-offset-4"
+            >
+              Ranking →
+            </Link>
+          </div>
         </div>
 
         {loading ? (

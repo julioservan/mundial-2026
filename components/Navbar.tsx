@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/eliminatoria", label: "Eliminatoria" },
   { href: "/predictions", label: "Predicciones" },
   { href: "/leaderboard", label: "Ranking" },
+  { href: "/players", label: "Jugadores" },
 ];
 
 export function Navbar() {
