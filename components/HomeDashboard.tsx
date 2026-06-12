@@ -121,7 +121,6 @@ export function HomeDashboard() {
         key={matchId}
         matchId={matchId}
         live={isLive}
-        started={Date.parse(MATCHES.find((m) => m.id === matchId)!.kickoff) <= now}
         entries={picksByMatch[matchId] ?? []}
         players={players}
       />
@@ -255,13 +254,11 @@ export function HomeDashboard() {
 function MatchRow({
   matchId,
   live,
-  started,
   entries,
   players,
 }: {
   matchId: string;
   live?: boolean;
-  started: boolean;
   entries: { userId: string; pick: Pick }[];
   players: Record<string, PlayerLite>;
 }) {
@@ -304,31 +301,24 @@ function MatchRow({
 
       {/* Pronósticos de la gente para este partido */}
       <div className="mt-3 pt-3 border-t border-border/60">
-        {started ? (
-          entries.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground text-center">
-              Nadie pronosticó este partido.
-            </p>
-          ) : (
-            <div className="grid grid-cols-3 gap-2">
-              <PickGroup
-                label={home?.name ?? "Local"}
-                voters={byPick("home")}
-                players={players}
-              />
-              <PickGroup label="Empate" voters={byPick("draw")} players={players} />
-              <PickGroup
-                label={away?.name ?? "Visitante"}
-                voters={byPick("away")}
-                players={players}
-              />
-            </div>
-          )
-        ) : (
+        {entries.length === 0 ? (
           <p className="text-[11px] text-muted-foreground text-center">
-            🔒 Pronósticos de la gente visibles al empezar ·{" "}
-            <span className="text-foreground">{entries.length}</span> ya pronosticaron
+            Nadie ha pronosticado este partido todavía.
           </p>
+        ) : (
+          <div className="grid grid-cols-3 gap-2">
+            <PickGroup
+              label={home?.name ?? "Local"}
+              voters={byPick("home")}
+              players={players}
+            />
+            <PickGroup label="Empate" voters={byPick("draw")} players={players} />
+            <PickGroup
+              label={away?.name ?? "Visitante"}
+              voters={byPick("away")}
+              players={players}
+            />
+          </div>
         )}
       </div>
     </li>
