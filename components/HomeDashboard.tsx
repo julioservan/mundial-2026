@@ -7,20 +7,30 @@ import { getTeam } from "@/lib/data/teams";
 import { LocalTime } from "@/components/LocalTime";
 import { Avatar } from "@/components/Avatar";
 import { useAuth } from "@/lib/supabase/auth";
+import { getSupabase } from "@/lib/supabase/client";
 import { deviceTimezone } from "@/lib/timezones";
 import { fetchResults, type ResultMap } from "@/lib/results";
 import { fetchLeaderboard, type LiveLeaderboardEntry } from "@/lib/leaderboard";
+import type { Pick } from "@/lib/scoring";
 
 // Ventana en la que consideramos un partido "en juego" desde su inicio.
 const LIVE_MS = 135 * 60 * 1000; // 2h15m
 const PLAYABLE = MATCHES.filter((m) => m.homeTeamId && m.awayTeamId);
 const MEDAL = ["text-accent", "text-cyan", "text-pink"];
 
+interface PlayerLite {
+  username: string;
+  avatar_url: string | null;
+}
+type PicksByMatch = Record<string, { userId: string; pick: Pick }[]>;
+
 export function HomeDashboard() {
   const { user, profile } = useAuth();
   const [now, setNow] = useState(() => Date.now());
   const [results, setResults] = useState<ResultMap>({});
   const [board, setBoard] = useState<LiveLeaderboardEntry[]>([]);
+  const [picksByMatch, setPicksByMatch] = useState<PicksByMatch>({});
+  const [players, setPlayers] = useState<Record<string, PlayerLite>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,11 +42,36 @@ export function HomeDashboard() {
     let active = true;
     async function load() {
       try {
-        const [r, b] = await Promise.all([fetchResults(), fetchLeaderboard()]);
-        if (active) {
-          setResults(r);
-          setBoard(b);
+        const supabase = getSupabase();
+        const [r, b, picksRes, profsRes] = await Promise.all([
+          fetchResults(),
+          fetchLeaderboard(),
+          supabase.from("mundial_predictions").select("user_id, match_id, pick"),
+          supabase.from("mundial_profiles").select("id, username, avatar_url"),
+        ]);
+        if (!active) return;
+        setResults(r);
+        setBoard(b);
+
+        const byMatch: PicksByMatch = {};
+        for (const row of picksRes.data ?? []) {
+          if (!row.pick) continue;
+          const id = row.match_id as string;
+          (byMatch[id] ??= []).push({
+            userId: row.user_id as string,
+            pick: row.pick as Pick,
+          });
         }
+        setPicksByMatch(byMatch);
+
+        const profs: Record<string, PlayerLite> = {};
+        for (const p of profsRes.data ?? []) {
+          profs[p.id as string] = {
+            username: p.username as string,
+            avatar_url: (p.avatar_url as string | null) ?? null,
+          };
+        }
+        setPlayers(profs);
       } catch {
         // pantalla sigue usable sin datos
       } finally {
@@ -59,8 +94,7 @@ export function HomeDashboard() {
     return now >= k && now < k + LIVE_MS && !isFinished(m.id);
   });
 
-  // Si no hay partidos en juego, mostramos todos los del próximo día con
-  // partidos (en la zona horaria del usuario).
+  // Si no hay partidos en juego, todos los del próximo día con partidos.
   const tz = profile?.timezone || deviceTimezone();
   const dayOf = (iso: string) =>
     new Intl.DateTimeFormat("en-CA", {
@@ -80,6 +114,19 @@ export function HomeDashboard() {
 
   const myIndex = board.findIndex((e) => e.userId === user?.id);
   const top = board.slice(0, 5);
+
+  function renderMatch(matchId: string, isLive: boolean) {
+    return (
+      <MatchRow
+        key={matchId}
+        matchId={matchId}
+        live={isLive}
+        started={Date.parse(MATCHES.find((m) => m.id === matchId)!.kickoff) <= now}
+        entries={picksByMatch[matchId] ?? []}
+        players={players}
+      />
+    );
+  }
 
   return (
     <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
@@ -105,7 +152,6 @@ export function HomeDashboard() {
         )}
       </header>
 
-      {/* Partidos jugándose ahora */}
       <section className="mb-10">
         <div className="flex items-center gap-2 mb-4">
           <span className="w-2 h-2 rounded-full bg-pink animate-pulse" aria-hidden />
@@ -113,11 +159,7 @@ export function HomeDashboard() {
         </div>
 
         {live.length > 0 ? (
-          <ul className="space-y-3">
-            {live.map((m) => (
-              <MatchRow key={m.id} matchId={m.id} live />
-            ))}
-          </ul>
+          <ul className="space-y-3">{live.map((m) => renderMatch(m.id, true))}</ul>
         ) : nextOfDay.length > 0 ? (
           <>
             <div className="text-sm text-muted-foreground mb-3">
@@ -128,9 +170,7 @@ export function HomeDashboard() {
               :
             </div>
             <ul className="space-y-3">
-              {nextOfDay.map((m) => (
-                <MatchRow key={m.id} matchId={m.id} />
-              ))}
+              {nextOfDay.map((m) => renderMatch(m.id, false))}
             </ul>
           </>
         ) : (
@@ -140,7 +180,6 @@ export function HomeDashboard() {
         )}
       </section>
 
-      {/* Resultado de la gente: ranking */}
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold tracking-tight">Clasificación</h2>
@@ -213,39 +252,128 @@ export function HomeDashboard() {
   );
 }
 
-function MatchRow({ matchId, live }: { matchId: string; live?: boolean }) {
+function MatchRow({
+  matchId,
+  live,
+  started,
+  entries,
+  players,
+}: {
+  matchId: string;
+  live?: boolean;
+  started: boolean;
+  entries: { userId: string; pick: Pick }[];
+  players: Record<string, PlayerLite>;
+}) {
   const match = MATCHES.find((m) => m.id === matchId)!;
   const home = getTeam(match.homeTeamId);
   const away = getTeam(match.awayTeamId);
 
+  const byPick = (p: Pick) => entries.filter((e) => e.pick === p);
+
   return (
-    <li className="bg-surface border border-border rounded-2xl p-4 flex items-center gap-3">
-      <div className="flex-1 flex items-center justify-end gap-2 text-sm font-semibold tracking-tight min-w-0">
-        <span className="truncate text-right">{home?.name}</span>
-        <span className="text-xl shrink-0" aria-hidden>
-          {home?.flag}
-        </span>
-      </div>
-      <div className="shrink-0 text-center px-2">
-        {live ? (
-          <span className="text-[10px] font-bold uppercase tracking-wider text-pink">
-            ● En juego
+    <li className="bg-surface border border-border rounded-2xl p-4">
+      <div className="flex items-center gap-3">
+        <div className="flex-1 flex items-center justify-end gap-2 text-sm font-semibold tracking-tight min-w-0">
+          <span className="truncate text-right">{home?.name}</span>
+          <span className="text-xl shrink-0" aria-hidden>
+            {home?.flag}
           </span>
-        ) : (
-          <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
-            <LocalTime iso={match.kickoff} mode="time" />
+        </div>
+        <div className="shrink-0 text-center px-2">
+          {live ? (
+            <span className="text-[10px] font-bold uppercase tracking-wider text-pink">
+              ● En juego
+            </span>
+          ) : (
+            <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
+              <LocalTime iso={match.kickoff} mode="time" />
+            </span>
+          )}
+          <div className="text-[10px] text-muted-foreground mt-0.5">
+            {match.group ? `Grupo ${match.group}` : "Eliminatoria"}
+          </div>
+        </div>
+        <div className="flex-1 flex items-center gap-2 text-sm font-semibold tracking-tight min-w-0">
+          <span className="text-xl shrink-0" aria-hidden>
+            {away?.flag}
           </span>
-        )}
-        <div className="text-[10px] text-muted-foreground mt-0.5">
-          {match.group ? `Grupo ${match.group}` : "Eliminatoria"}
+          <span className="truncate">{away?.name}</span>
         </div>
       </div>
-      <div className="flex-1 flex items-center gap-2 text-sm font-semibold tracking-tight min-w-0">
-        <span className="text-xl shrink-0" aria-hidden>
-          {away?.flag}
-        </span>
-        <span className="truncate">{away?.name}</span>
+
+      {/* Pronósticos de la gente para este partido */}
+      <div className="mt-3 pt-3 border-t border-border/60">
+        {started ? (
+          entries.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground text-center">
+              Nadie pronosticó este partido.
+            </p>
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              <PickGroup
+                label={home?.name ?? "Local"}
+                voters={byPick("home")}
+                players={players}
+              />
+              <PickGroup label="Empate" voters={byPick("draw")} players={players} />
+              <PickGroup
+                label={away?.name ?? "Visitante"}
+                voters={byPick("away")}
+                players={players}
+              />
+            </div>
+          )
+        ) : (
+          <p className="text-[11px] text-muted-foreground text-center">
+            🔒 Pronósticos de la gente visibles al empezar ·{" "}
+            <span className="text-foreground">{entries.length}</span> ya pronosticaron
+          </p>
+        )}
       </div>
     </li>
+  );
+}
+
+function PickGroup({
+  label,
+  voters,
+  players,
+}: {
+  label: string;
+  voters: { userId: string }[];
+  players: Record<string, PlayerLite>;
+}) {
+  const shown = voters.slice(0, 4);
+  const extra = voters.length - shown.length;
+  return (
+    <div className="text-center">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground truncate mb-1">
+        {label}
+      </div>
+      <div className="font-display text-lg text-accent leading-none">
+        {voters.length}
+      </div>
+      <div className="flex items-center justify-center mt-1.5">
+        {shown.map((v, i) => {
+          const p = players[v.userId];
+          return (
+            <span key={v.userId} className={i > 0 ? "-ml-1.5" : ""}>
+              <Avatar
+                url={p?.avatar_url ?? null}
+                name={p?.username ?? "?"}
+                size={20}
+                className="text-[8px] ring-1 ring-surface"
+              />
+            </span>
+          );
+        })}
+        {extra > 0 && (
+          <span className="-ml-1.5 w-5 h-5 rounded-full bg-surface-muted text-[8px] font-bold flex items-center justify-center ring-1 ring-surface">
+            +{extra}
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
