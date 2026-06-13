@@ -15,9 +15,12 @@ import {
   WEEKDAY_LABELS_ES,
 } from "@/lib/utils/calendar";
 
+type ScorersMap = Record<string, { home: string[]; away: string[] }>;
+
 interface Props {
   matches: Match[];
   results?: ResultMap;
+  scorers?: ScorersMap;
 }
 
 const AVAILABLE_MONTHS: Array<{ year: number; month: number }> = [
@@ -46,7 +49,7 @@ function stageColor(stage: Match["stage"]): string {
   }
 }
 
-export function MatchesCalendar({ matches, results = {} }: Props) {
+export function MatchesCalendar({ matches, results = {}, scorers = {} }: Props) {
   const [monthIdx, setMonthIdx] = useState(0);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
@@ -203,29 +206,41 @@ export function MatchesCalendar({ matches, results = {} }: Props) {
                 <li key={m.id} className="border-b border-border last:border-0">
                   <Link
                     href={`/matches/${m.id}`}
-                    className="flex items-center justify-between gap-3 text-sm py-2 hover:text-accent transition-colors"
+                    className="block py-2 hover:text-accent transition-colors"
                   >
-                    <span className="font-mono tabular-nums w-12">
-                      {results[m.id] &&
-                      results[m.id].home !== "" &&
-                      results[m.id].away !== "" ? (
-                        <span className="font-bold text-foreground">
-                          {results[m.id].home}–{results[m.id].away}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">
-                          <LocalTime iso={m.kickoff} mode="time" />
-                        </span>
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <span className="font-mono tabular-nums w-12">
+                        {results[m.id] &&
+                        results[m.id].home !== "" &&
+                        results[m.id].away !== "" ? (
+                          <span className="font-bold text-foreground">
+                            {results[m.id].home}–{results[m.id].away}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            <LocalTime iso={m.kickoff} mode="time" />
+                          </span>
+                        )}
+                      </span>
+                      <span className="flex-1 truncate">
+                        {home?.flag ?? "?"} {home?.name ?? "Por definir"}{" "}
+                        <span className="text-muted-foreground">vs</span>{" "}
+                        {away?.name ?? "Por definir"} {away?.flag ?? "?"}
+                      </span>
+                      <span className="text-xs text-muted-foreground hidden sm:inline">
+                        {m.group ? `Grupo ${m.group}` : stageLabel(m.stage)}
+                      </span>
+                    </div>
+                    {scorers[m.id] &&
+                      (scorers[m.id].home.length > 0 ||
+                        scorers[m.id].away.length > 0) && (
+                        <div className="pl-12 mt-1 text-[10px] text-muted-foreground/80 truncate">
+                          ⚽{" "}
+                          {[...scorers[m.id].home, ...scorers[m.id].away].join(
+                            ", ",
+                          )}
+                        </div>
                       )}
-                    </span>
-                    <span className="flex-1 truncate">
-                      {home?.flag ?? "?"} {home?.name ?? "Por definir"}{" "}
-                      <span className="text-muted-foreground">vs</span>{" "}
-                      {away?.name ?? "Por definir"} {away?.flag ?? "?"}
-                    </span>
-                    <span className="text-xs text-muted-foreground hidden sm:inline">
-                      {m.group ? `Grupo ${m.group}` : stageLabel(m.stage)}
-                    </span>
                   </Link>
                 </li>
               );

@@ -86,6 +86,8 @@ interface ApiGame {
   away_team_name_en?: string;
   home_score?: string;
   away_score?: string;
+  home_scorers?: string;
+  away_scorers?: string;
   finished?: string; // "TRUE" | "FALSE"
   time_elapsed?: string; // "notstarted" | "live" | "finished" | minuto
 }
@@ -97,6 +99,19 @@ export interface MappedGame {
   finished: boolean;
   live: boolean;
   status: string;
+  homeScorers: string[];
+  awayScorers: string[];
+}
+
+// Los goleadores vienen como un texto tipo {"R. Jiménez 67'","..."} con
+// comillas variadas; lo limpiamos y separamos en una lista.
+function parseScorers(raw?: string): string[] {
+  if (!raw || raw.toLowerCase() === "null") return [];
+  return raw
+    .replace(/[{}"“”„\\]/g, "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 export async function fetchWorldCupGames(): Promise<ApiGame[]> {
@@ -128,6 +143,8 @@ function mapGame(game: ApiGame): MappedGame | null {
 
   // Orientación: si nuestro local coincide con el local de la API, directo.
   const sameOrientation = ours.home === apiHome;
+  const hScorers = parseScorers(game.home_scorers);
+  const aScorers = parseScorers(game.away_scorers);
   return {
     matchId: ours.id,
     home: sameOrientation ? hs : as,
@@ -135,7 +152,14 @@ function mapGame(game: ApiGame): MappedGame | null {
     finished: String(game.finished).toUpperCase() === "TRUE",
     live: game.time_elapsed === "live",
     status: game.time_elapsed ?? "",
+    homeScorers: sameOrientation ? hScorers : aScorers,
+    awayScorers: sameOrientation ? aScorers : hScorers,
   };
+}
+
+// Todos los partidos de grupo mapeados (para buscar uno concreto).
+export function mapAllGames(games: ApiGame[]): MappedGame[] {
+  return games.map(mapGame).filter((g): g is MappedGame => g !== null);
 }
 
 // Solo los partidos TERMINADOS (para guardar como resultado oficial).

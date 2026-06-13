@@ -25,6 +25,10 @@ export default function MatchDetailPage() {
   const [picks, setPicks] = useState<{ userId: string; pick: Pick }[]>([]);
   const [players, setPlayers] = useState<Record<string, PlayerLite>>({});
   const [result, setResult] = useState<{ home: string; away: string } | null>(null);
+  const [scorers, setScorers] = useState<{ home: string[]; away: string[] }>({
+    home: [],
+    away: [],
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,15 +36,24 @@ export default function MatchDetailPage() {
     async function load() {
       try {
         const supabase = getSupabase();
-        const [picksRes, profsRes, results] = await Promise.all([
+        const [picksRes, profsRes, results, matchInfo] = await Promise.all([
           supabase
             .from("mundial_predictions")
             .select("user_id, pick")
             .eq("match_id", id),
           supabase.from("mundial_profiles").select("id, username, avatar_url"),
           fetchResults(),
+          fetch(`/api/match/${id}`)
+            .then((r) => r.json())
+            .catch(() => null),
         ]);
         if (!active) return;
+        if (matchInfo?.found) {
+          setScorers({
+            home: matchInfo.homeScorers ?? [],
+            away: matchInfo.awayScorers ?? [],
+          });
+        }
         setPicks(
           (picksRes.data ?? [])
             .filter((r) => r.pick)
@@ -129,6 +142,28 @@ export default function MatchDetailPage() {
             </div>
           </div>
         </div>
+
+        {(scorers.home.length > 0 || scorers.away.length > 0) && (
+          <div className="mt-5 pt-4 border-t border-border/60 grid grid-cols-2 gap-4 text-xs">
+            <div className="space-y-1">
+              {scorers.home.map((g, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <span aria-hidden>⚽</span>
+                  <span className="truncate">{g}</span>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-1 text-right">
+              {scorers.away.map((g, i) => (
+                <div key={i} className="flex items-center gap-1.5 justify-end">
+                  <span className="truncate">{g}</span>
+                  <span aria-hidden>⚽</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="text-center text-[11px] text-muted-foreground mt-4">
           {match.venue.stadium} · {match.venue.city}
         </div>

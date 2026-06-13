@@ -14,12 +14,15 @@ function groupByDate(matches: Match[]) {
   return Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b));
 }
 
+type ScorersMap = Record<string, { home: string[]; away: string[] }>;
+
 interface Props {
   matches: Match[];
   results?: ResultMap;
+  scorers?: ScorersMap;
 }
 
-export function MatchesList({ matches, results = {} }: Props) {
+export function MatchesList({ matches, results = {}, scorers = {} }: Props) {
   const groupStage = matches.filter((m) => m.stage === "group");
   const knockouts = matches.filter((m) => m.stage !== "group");
   const byDate = groupByDate(groupStage);
@@ -42,6 +45,7 @@ export function MatchesList({ matches, results = {} }: Props) {
                     key={match.id}
                     match={match}
                     result={results[match.id]}
+                    scorers={scorers[match.id]}
                     href={`/matches/${match.id}`}
                   />
                 ))}

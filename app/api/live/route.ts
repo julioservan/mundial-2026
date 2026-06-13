@@ -14,6 +14,8 @@ export async function GET() {
       away: m.away,
       live: m.live,
       finished: m.finished,
+      homeScorers: m.homeScorers,
+      awayScorers: m.awayScorers,
     }));
     return NextResponse.json(
       { matches },
