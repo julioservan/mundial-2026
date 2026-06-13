@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import type { Match } from "@/types";
 import { getTeam } from "@/lib/data/teams";
 import { stageLabel } from "@/lib/utils/format";
@@ -199,31 +200,33 @@ export function MatchesCalendar({ matches, results = {} }: Props) {
               const home = getTeam(m.homeTeamId);
               const away = getTeam(m.awayTeamId);
               return (
-                <li
-                  key={m.id}
-                  className="flex items-center justify-between gap-3 text-sm border-b border-border last:border-0 pb-2 last:pb-0"
-                >
-                  <span className="font-mono tabular-nums w-12">
-                    {results[m.id] &&
-                    results[m.id].home !== "" &&
-                    results[m.id].away !== "" ? (
-                      <span className="font-bold text-foreground">
-                        {results[m.id].home}–{results[m.id].away}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">
-                        <LocalTime iso={m.kickoff} mode="time" />
-                      </span>
-                    )}
-                  </span>
-                  <span className="flex-1 truncate">
-                    {home?.flag ?? "?"} {home?.name ?? "Por definir"}{" "}
-                    <span className="text-muted-foreground">vs</span>{" "}
-                    {away?.name ?? "Por definir"} {away?.flag ?? "?"}
-                  </span>
-                  <span className="text-xs text-muted-foreground hidden sm:inline">
-                    {m.group ? `Grupo ${m.group}` : stageLabel(m.stage)}
-                  </span>
+                <li key={m.id} className="border-b border-border last:border-0">
+                  <Link
+                    href={`/matches/${m.id}`}
+                    className="flex items-center justify-between gap-3 text-sm py-2 hover:text-accent transition-colors"
+                  >
+                    <span className="font-mono tabular-nums w-12">
+                      {results[m.id] &&
+                      results[m.id].home !== "" &&
+                      results[m.id].away !== "" ? (
+                        <span className="font-bold text-foreground">
+                          {results[m.id].home}–{results[m.id].away}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">
+                          <LocalTime iso={m.kickoff} mode="time" />
+                        </span>
+                      )}
+                    </span>
+                    <span className="flex-1 truncate">
+                      {home?.flag ?? "?"} {home?.name ?? "Por definir"}{" "}
+                      <span className="text-muted-foreground">vs</span>{" "}
+                      {away?.name ?? "Por definir"} {away?.flag ?? "?"}
+                    </span>
+                    <span className="text-xs text-muted-foreground hidden sm:inline">
+                      {m.group ? `Grupo ${m.group}` : stageLabel(m.stage)}
+                    </span>
+                  </Link>
                 </li>
               );
             })}

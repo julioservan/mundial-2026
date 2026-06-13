@@ -42,6 +42,7 @@ export function MatchesList({ matches, results = {} }: Props) {
                     key={match.id}
                     match={match}
                     result={results[match.id]}
+                    href={`/matches/${match.id}`}
                   />
                 ))}
               </div>
