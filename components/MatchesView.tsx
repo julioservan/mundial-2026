@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Match } from "@/types";
 import { MatchesList } from "@/components/MatchesList";
 import { MatchesCalendar } from "@/components/MatchesCalendar";
+import { fetchResults, type ResultMap } from "@/lib/results";
 
 type View = "list" | "calendar";
 
@@ -13,6 +14,19 @@ interface Props {
 
 export function MatchesView({ matches }: Props) {
   const [view, setView] = useState<View>("list");
+  const [results, setResults] = useState<ResultMap>({});
+
+  useEffect(() => {
+    let active = true;
+    fetchResults()
+      .then((r) => {
+        if (active) setResults(r);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <div>
@@ -56,9 +70,9 @@ export function MatchesView({ matches }: Props) {
       </div>
 
       {view === "list" ? (
-        <MatchesList matches={matches} />
+        <MatchesList matches={matches} results={results} />
       ) : (
-        <MatchesCalendar matches={matches} />
+        <MatchesCalendar matches={matches} results={results} />
       )}
     </div>
   );

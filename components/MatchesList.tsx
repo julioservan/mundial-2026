@@ -1,6 +1,7 @@
 import { MatchCard } from "@/components/MatchCard";
 import { formatMatchDate, stageLabel } from "@/lib/utils/format";
 import type { Match } from "@/types";
+import type { ResultMap } from "@/lib/results";
 
 function groupByDate(matches: Match[]) {
   const grouped = new Map<string, Match[]>();
@@ -15,9 +16,10 @@ function groupByDate(matches: Match[]) {
 
 interface Props {
   matches: Match[];
+  results?: ResultMap;
 }
 
-export function MatchesList({ matches }: Props) {
+export function MatchesList({ matches, results = {} }: Props) {
   const groupStage = matches.filter((m) => m.stage === "group");
   const knockouts = matches.filter((m) => m.stage !== "group");
   const byDate = groupByDate(groupStage);
@@ -36,7 +38,12 @@ export function MatchesList({ matches }: Props) {
               </div>
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {dayMatches.map((match) => (
-                  <MatchCard key={match.id} match={match} />
+                  <MatchCard
+                    key={match.id}
+                    match={match}
+                    result={results[match.id]}
+                    href={`/matches/${match.id}`}
+                  />
                 ))}
               </div>
             </div>
