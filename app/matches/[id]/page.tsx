@@ -25,6 +25,10 @@ export default function MatchDetailPage() {
   const [picks, setPicks] = useState<{ userId: string; pick: Pick }[]>([]);
   const [players, setPlayers] = useState<Record<string, PlayerLite>>({});
   const [result, setResult] = useState<{ home: string; away: string } | null>(null);
+  const [scorers, setScorers] = useState<{ home: string[]; away: string[] }>({
+    home: [],
+    away: [],
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,15 +36,24 @@ export default function MatchDetailPage() {
     async function load() {
       try {
         const supabase = getSupabase();
-        const [picksRes, profsRes, results] = await Promise.all([
+        const [picksRes, profsRes, results, matchInfo] = await Promise.all([
           supabase
             .from("mundial_predictions")
             .select("user_id, pick")
             .eq("match_id", id),
           supabase.from("mundial_profiles").select("id, username, avatar_url"),
           fetchResults(),
+          fetch(`/api/match/${id}`)
+            .then((r) => r.json())
+            .catch(() => null),
         ]);
         if (!active) return;
+        if (matchInfo?.found) {
+          setScorers({
+            home: matchInfo.homeScorers ?? [],
+            away: matchInfo.awayScorers ?? [],
+          });
+        }
         setPicks(
           (picksRes.data ?? [])
             .filter((r) => r.pick)
@@ -133,6 +146,31 @@ export default function MatchDetailPage() {
           {match.venue.stadium} · {match.venue.city}
         </div>
       </div>
+
+      {/* Goleadores */}
+      {(scorers.home.length > 0 || scorers.away.length > 0) && (
+        <div className="bg-surface border border-border rounded-2xl p-5 mb-8">
+          <h2 className="text-[11px] font-semibold tracking-[0.15em] uppercase text-muted-foreground mb-3">
+            ⚽ Goles
+          </h2>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="space-y-1">
+              {scorers.home.map((g, i) => (
+                <div key={i} className="truncate">
+                  {g}
+                </div>
+              ))}
+            </div>
+            <div className="space-y-1 text-right">
+              {scorers.away.map((g, i) => (
+                <div key={i} className="truncate">
+                  {g}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Pronósticos de la gente */}
       <h2 className="text-xl font-bold tracking-tight mb-4">
