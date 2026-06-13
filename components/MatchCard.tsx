@@ -8,6 +8,7 @@ interface Props {
   match: Match;
   href?: string;
   result?: { home: string; away: string } | null;
+  scorers?: { home: string[]; away: string[] };
 }
 
 const STAGE_STRIPE: Record<MatchStage, string> = {
@@ -20,7 +21,7 @@ const STAGE_STRIPE: Record<MatchStage, string> = {
   final: "bg-accent",
 };
 
-export function MatchCard({ match, href, result }: Props) {
+export function MatchCard({ match, href, result, scorers }: Props) {
   const home = getTeam(match.homeTeamId);
   const away = getTeam(match.awayTeamId);
   const stripe = STAGE_STRIPE[match.stage];
@@ -116,6 +117,25 @@ export function MatchCard({ match, href, result }: Props) {
               <span className="font-mono text-xs text-muted-foreground tabular-nums w-5 text-right">
                 {awayGoals}
               </span>
+            </div>
+          </div>
+        )}
+
+        {finished && scorers && (scorers.home.length > 0 || scorers.away.length > 0) && (
+          <div className="mt-3 pt-3 border-t border-border/60 grid grid-cols-2 gap-2 text-[10px] text-muted-foreground">
+            <div className="space-y-0.5">
+              {scorers.home.map((g, i) => (
+                <div key={i} className="truncate">
+                  ⚽ {g}
+                </div>
+              ))}
+            </div>
+            <div className="space-y-0.5 text-right">
+              {scorers.away.map((g, i) => (
+                <div key={i} className="truncate">
+                  {g} ⚽
+                </div>
+              ))}
             </div>
           </div>
         )}

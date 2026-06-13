@@ -142,35 +142,32 @@ export default function MatchDetailPage() {
             </div>
           </div>
         </div>
-        <div className="text-center text-[11px] text-muted-foreground mt-4">
-          {match.venue.stadium} · {match.venue.city}
-        </div>
-      </div>
 
-      {/* Goleadores */}
-      {(scorers.home.length > 0 || scorers.away.length > 0) && (
-        <div className="bg-surface border border-border rounded-2xl p-5 mb-8">
-          <h2 className="text-[11px] font-semibold tracking-[0.15em] uppercase text-muted-foreground mb-3">
-            ⚽ Goles
-          </h2>
-          <div className="grid grid-cols-2 gap-4 text-sm">
+        {(scorers.home.length > 0 || scorers.away.length > 0) && (
+          <div className="mt-5 pt-4 border-t border-border/60 grid grid-cols-2 gap-4 text-xs">
             <div className="space-y-1">
               {scorers.home.map((g, i) => (
-                <div key={i} className="truncate">
-                  {g}
+                <div key={i} className="flex items-center gap-1.5">
+                  <span aria-hidden>⚽</span>
+                  <span className="truncate">{g}</span>
                 </div>
               ))}
             </div>
             <div className="space-y-1 text-right">
               {scorers.away.map((g, i) => (
-                <div key={i} className="truncate">
-                  {g}
+                <div key={i} className="flex items-center gap-1.5 justify-end">
+                  <span className="truncate">{g}</span>
+                  <span aria-hidden>⚽</span>
                 </div>
               ))}
             </div>
           </div>
+        )}
+
+        <div className="text-center text-[11px] text-muted-foreground mt-4">
+          {match.venue.stadium} · {match.venue.city}
         </div>
-      )}
+      </div>
 
       {/* Pronósticos de la gente */}
       <h2 className="text-xl font-bold tracking-tight mb-4">

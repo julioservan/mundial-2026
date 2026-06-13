@@ -12,15 +12,35 @@ interface Props {
   matches: Match[];
 }
 
+export type ScorersMap = Record<string, { home: string[]; away: string[] }>;
+
 export function MatchesView({ matches }: Props) {
   const [view, setView] = useState<View>("list");
   const [results, setResults] = useState<ResultMap>({});
+  const [scorers, setScorers] = useState<ScorersMap>({});
 
   useEffect(() => {
     let active = true;
     fetchResults()
       .then((r) => {
         if (active) setResults(r);
+      })
+      .catch(() => {});
+    // Goleadores (y marcador en vivo) desde la API.
+    fetch("/api/live")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!active) return;
+        const map: ScorersMap = {};
+        for (const m of data.matches ?? []) {
+          if (m.homeScorers?.length || m.awayScorers?.length) {
+            map[m.matchId] = {
+              home: m.homeScorers ?? [],
+              away: m.awayScorers ?? [],
+            };
+          }
+        }
+        setScorers(map);
       })
       .catch(() => {});
     return () => {
@@ -70,9 +90,9 @@ export function MatchesView({ matches }: Props) {
       </div>
 
       {view === "list" ? (
-        <MatchesList matches={matches} results={results} />
+        <MatchesList matches={matches} results={results} scorers={scorers} />
       ) : (
-        <MatchesCalendar matches={matches} results={results} />
+        <MatchesCalendar matches={matches} results={results} scorers={scorers} />
       )}
     </div>
   );
