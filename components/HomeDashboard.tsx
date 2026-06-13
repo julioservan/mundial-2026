@@ -31,11 +31,40 @@ export function HomeDashboard() {
   const [board, setBoard] = useState<LiveLeaderboardEntry[]>([]);
   const [picksByMatch, setPicksByMatch] = useState<PicksByMatch>({});
   const [players, setPlayers] = useState<Record<string, PlayerLite>>({});
+  const [liveScores, setLiveScores] = useState<
+    Record<string, { home: number; away: number; live: boolean; finished: boolean }>
+  >({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(t);
+  }, []);
+
+  // Marcadores en vivo desde la API (se refresca cada 30 s).
+  useEffect(() => {
+    let active = true;
+    async function loadLive() {
+      try {
+        const res = await fetch("/api/live");
+        const data = await res.json();
+        if (!active) return;
+        const map: Record<
+          string,
+          { home: number; away: number; live: boolean; finished: boolean }
+        > = {};
+        for (const m of data.matches ?? []) map[m.matchId] = m;
+        setLiveScores(map);
+      } catch {
+        // sin datos en vivo, el panel sigue funcionando
+      }
+    }
+    void loadLive();
+    const t = setInterval(loadLive, 30_000);
+    return () => {
+      active = false;
+      clearInterval(t);
+    };
   }, []);
 
   useEffect(() => {
@@ -121,6 +150,7 @@ export function HomeDashboard() {
         key={matchId}
         matchId={matchId}
         live={isLive}
+        score={liveScores[matchId]}
         entries={picksByMatch[matchId] ?? []}
         players={players}
       />
@@ -254,11 +284,13 @@ export function HomeDashboard() {
 function MatchRow({
   matchId,
   live,
+  score,
   entries,
   players,
 }: {
   matchId: string;
   live?: boolean;
+  score?: { home: number; away: number; live: boolean; finished: boolean };
   entries: { userId: string; pick: Pick }[];
   players: Record<string, PlayerLite>;
 }) {
@@ -278,18 +310,43 @@ function MatchRow({
           </span>
         </div>
         <div className="shrink-0 text-center px-2">
-          {live ? (
-            <span className="text-[10px] font-bold uppercase tracking-wider text-pink">
-              ● En juego
-            </span>
+          {score ? (
+            <>
+              <span className="font-mono font-bold text-base whitespace-nowrap">
+                {score.home}–{score.away}
+              </span>
+              <div className="text-[10px] mt-0.5">
+                {score.live ? (
+                  <span className="text-pink font-bold uppercase tracking-wider">
+                    ● En vivo
+                  </span>
+                ) : score.finished ? (
+                  <span className="text-muted-foreground uppercase tracking-wider">
+                    Final
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">
+                    {match.group ? `Grupo ${match.group}` : "Eliminatoria"}
+                  </span>
+                )}
+              </div>
+            </>
           ) : (
-            <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
-              <LocalTime iso={match.kickoff} mode="time" />
-            </span>
+            <>
+              {live ? (
+                <span className="text-[10px] font-bold uppercase tracking-wider text-pink">
+                  ● En juego
+                </span>
+              ) : (
+                <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
+                  <LocalTime iso={match.kickoff} mode="time" />
+                </span>
+              )}
+              <div className="text-[10px] text-muted-foreground mt-0.5">
+                {match.group ? `Grupo ${match.group}` : "Eliminatoria"}
+              </div>
+            </>
           )}
-          <div className="text-[10px] text-muted-foreground mt-0.5">
-            {match.group ? `Grupo ${match.group}` : "Eliminatoria"}
-          </div>
         </div>
         <div className="flex-1 flex items-center gap-2 text-sm font-semibold tracking-tight min-w-0">
           <span className="text-xl shrink-0" aria-hidden>
