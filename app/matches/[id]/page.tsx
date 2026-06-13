@@ -144,19 +144,19 @@ export default function MatchDetailPage() {
         </div>
 
         {(scorers.home.length > 0 || scorers.away.length > 0) && (
-          <div className="mt-5 pt-4 border-t border-border/60 grid grid-cols-2 gap-4 text-xs">
-            <div className="space-y-1">
+          <div className="mt-5 pt-4 border-t border-border/60 grid grid-cols-2 gap-4 text-base">
+            <div className="space-y-1.5">
               {scorers.home.map((g, i) => (
-                <div key={i} className="flex items-center gap-1.5">
+                <div key={i} className="flex items-center gap-2">
                   <span aria-hidden>⚽</span>
-                  <span className="truncate">{g}</span>
+                  <span className="truncate font-medium">{g}</span>
                 </div>
               ))}
             </div>
-            <div className="space-y-1 text-right">
+            <div className="space-y-1.5 text-right">
               {scorers.away.map((g, i) => (
-                <div key={i} className="flex items-center gap-1.5 justify-end">
-                  <span className="truncate">{g}</span>
+                <div key={i} className="flex items-center gap-2 justify-end">
+                  <span className="truncate font-medium">{g}</span>
                   <span aria-hidden>⚽</span>
                 </div>
               ))}
