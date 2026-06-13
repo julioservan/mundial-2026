@@ -181,30 +181,35 @@ export function HomeDashboard() {
         )}
       </header>
 
+      {live.length > 0 && (
+        <section className="mb-10">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="w-2 h-2 rounded-full bg-pink animate-pulse" aria-hidden />
+            <h2 className="text-xl font-bold tracking-tight">Jugándose ahora</h2>
+          </div>
+          <ul className="space-y-3">{live.map((m) => renderMatch(m.id, true))}</ul>
+        </section>
+      )}
+
       <section className="mb-10">
-        <div className="flex items-center gap-2 mb-4">
-          <span className="w-2 h-2 rounded-full bg-pink animate-pulse" aria-hidden />
-          <h2 className="text-xl font-bold tracking-tight">Jugándose ahora</h2>
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <h2 className="text-xl font-bold tracking-tight">Próximos partidos</h2>
+          {nextOfDay.length > 0 && (
+            <span className="text-sm text-muted-foreground">
+              <LocalTime iso={nextOfDay[0].kickoff} mode="date" />
+            </span>
+          )}
         </div>
 
-        {live.length > 0 ? (
-          <ul className="space-y-3">{live.map((m) => renderMatch(m.id, true))}</ul>
-        ) : nextOfDay.length > 0 ? (
-          <>
-            <div className="text-sm text-muted-foreground mb-3">
-              No hay partidos en juego. Los siguientes son el{" "}
-              <span className="text-foreground font-semibold">
-                <LocalTime iso={nextOfDay[0].kickoff} mode="date" />
-              </span>
-              :
-            </div>
-            <ul className="space-y-3">
-              {nextOfDay.map((m) => renderMatch(m.id, false))}
-            </ul>
-          </>
+        {nextOfDay.length > 0 ? (
+          <ul className="space-y-3">
+            {nextOfDay.map((m) => renderMatch(m.id, false))}
+          </ul>
         ) : (
           <div className="bg-surface border border-border rounded-2xl p-5 text-sm text-muted-foreground">
-            No hay más partidos programados.
+            {live.length > 0
+              ? "No hay más partidos programados hoy."
+              : "No hay más partidos programados."}
           </div>
         )}
       </section>
