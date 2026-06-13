@@ -234,7 +234,7 @@ export function MatchesCalendar({ matches, results = {}, scorers = {} }: Props) 
                     {scorers[m.id] &&
                       (scorers[m.id].home.length > 0 ||
                         scorers[m.id].away.length > 0) && (
-                        <div className="pl-12 mt-1 text-[10px] text-muted-foreground/80 truncate">
+                        <div className="pl-12 mt-1 text-sm text-foreground/80 truncate">
                           ⚽{" "}
                           {[...scorers[m.id].home, ...scorers[m.id].away].join(
                             ", ",

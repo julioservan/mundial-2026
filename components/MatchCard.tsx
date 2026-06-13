@@ -122,15 +122,15 @@ export function MatchCard({ match, href, result, scorers }: Props) {
         )}
 
         {finished && scorers && (scorers.home.length > 0 || scorers.away.length > 0) && (
-          <div className="mt-3 pt-3 border-t border-border/60 grid grid-cols-2 gap-2 text-[10px] text-muted-foreground">
-            <div className="space-y-0.5">
+          <div className="mt-3 pt-3 border-t border-border/60 grid grid-cols-2 gap-2 text-sm text-foreground/90">
+            <div className="space-y-1">
               {scorers.home.map((g, i) => (
                 <div key={i} className="truncate">
                   ⚽ {g}
                 </div>
               ))}
             </div>
-            <div className="space-y-0.5 text-right">
+            <div className="space-y-1 text-right">
               {scorers.away.map((g, i) => (
                 <div key={i} className="truncate">
                   {g} ⚽
