@@ -7,6 +7,7 @@ import { LocalTime } from "@/components/LocalTime";
 interface Props {
   match: Match;
   href?: string;
+  result?: { home: string; away: string } | null;
 }
 
 const STAGE_STRIPE: Record<MatchStage, string> = {
@@ -19,10 +20,16 @@ const STAGE_STRIPE: Record<MatchStage, string> = {
   final: "bg-accent",
 };
 
-export function MatchCard({ match, href }: Props) {
+export function MatchCard({ match, href, result }: Props) {
   const home = getTeam(match.homeTeamId);
   const away = getTeam(match.awayTeamId);
   const stripe = STAGE_STRIPE[match.stage];
+
+  const finished = Boolean(result && result.home !== "" && result.away !== "");
+  const homeGoals = finished ? result!.home : (match.homeScore ?? "—");
+  const awayGoals = finished ? result!.away : (match.awayScore ?? "—");
+  const homeWon = finished && Number(result!.home) > Number(result!.away);
+  const awayWon = finished && Number(result!.away) > Number(result!.home);
 
   const body = (
     <div className="relative bg-surface border border-border hover:border-border-strong rounded-xl overflow-hidden transition-all hover:translate-y-[-2px]">
@@ -34,7 +41,11 @@ export function MatchCard({ match, href }: Props) {
             {match.matchday ? ` · J${match.matchday}` : ""}
           </span>
           <span className="font-mono">
-            <LocalTime iso={match.kickoff} />
+            {finished ? (
+              <span className="text-foreground font-semibold">Final</span>
+            ) : (
+              <LocalTime iso={match.kickoff} />
+            )}
           </span>
         </div>
 
@@ -43,22 +54,42 @@ export function MatchCard({ match, href }: Props) {
             <span className="text-2xl leading-none" aria-hidden>
               {home?.flag ?? "❓"}
             </span>
-            <span className="font-semibold tracking-tight truncate flex-1">
+            <span
+              className={`tracking-tight truncate flex-1 ${
+                homeWon ? "font-bold" : "font-semibold"
+              } ${finished && !homeWon && !awayWon ? "" : ""}`}
+            >
               {home?.name ?? "Por definir"}
             </span>
-            <span className="font-mono text-xs text-muted-foreground tabular-nums w-5 text-right">
-              {match.homeScore ?? "—"}
+            <span
+              className={`font-mono tabular-nums w-5 text-right ${
+                finished
+                  ? "text-base font-bold text-foreground"
+                  : "text-xs text-muted-foreground"
+              }`}
+            >
+              {homeGoals}
             </span>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-2xl leading-none" aria-hidden>
               {away?.flag ?? "❓"}
             </span>
-            <span className="font-semibold tracking-tight truncate flex-1">
+            <span
+              className={`tracking-tight truncate flex-1 ${
+                awayWon ? "font-bold" : "font-semibold"
+              }`}
+            >
               {away?.name ?? "Por definir"}
             </span>
-            <span className="font-mono text-xs text-muted-foreground tabular-nums w-5 text-right">
-              {match.awayScore ?? "—"}
+            <span
+              className={`font-mono tabular-nums w-5 text-right ${
+                finished
+                  ? "text-base font-bold text-foreground"
+                  : "text-xs text-muted-foreground"
+              }`}
+            >
+              {awayGoals}
             </span>
           </div>
         </div>

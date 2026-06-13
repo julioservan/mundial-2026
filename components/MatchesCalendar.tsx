@@ -5,6 +5,7 @@ import type { Match } from "@/types";
 import { getTeam } from "@/lib/data/teams";
 import { stageLabel } from "@/lib/utils/format";
 import { LocalTime } from "@/components/LocalTime";
+import type { ResultMap } from "@/lib/results";
 import {
   buildMonthGrid,
   isSameDay,
@@ -15,6 +16,7 @@ import {
 
 interface Props {
   matches: Match[];
+  results?: ResultMap;
 }
 
 const AVAILABLE_MONTHS: Array<{ year: number; month: number }> = [
@@ -43,7 +45,7 @@ function stageColor(stage: Match["stage"]): string {
   }
 }
 
-export function MatchesCalendar({ matches }: Props) {
+export function MatchesCalendar({ matches, results = {} }: Props) {
   const [monthIdx, setMonthIdx] = useState(0);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
@@ -201,8 +203,18 @@ export function MatchesCalendar({ matches }: Props) {
                   key={m.id}
                   className="flex items-center justify-between gap-3 text-sm border-b border-border last:border-0 pb-2 last:pb-0"
                 >
-                  <span className="font-mono text-muted-foreground tabular-nums w-12">
-                    <LocalTime iso={m.kickoff} mode="time" />
+                  <span className="font-mono tabular-nums w-12">
+                    {results[m.id] &&
+                    results[m.id].home !== "" &&
+                    results[m.id].away !== "" ? (
+                      <span className="font-bold text-foreground">
+                        {results[m.id].home}–{results[m.id].away}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">
+                        <LocalTime iso={m.kickoff} mode="time" />
+                      </span>
+                    )}
                   </span>
                   <span className="flex-1 truncate">
                     {home?.flag ?? "?"} {home?.name ?? "Por definir"}{" "}
