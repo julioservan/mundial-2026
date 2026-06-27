@@ -36,10 +36,10 @@ export async function GET(
   const staticMatch = MATCHES.find((m) => m.id === id);
   const supabase = getSupabaseAdmin();
 
-  // Estado + id externo + equipos del snapshot (si existe).
+  // Estado + id externo + equipos + marcador en vivo del snapshot (si existe).
   const { data: fix } = await supabase
     .from("mundial_fixtures")
-    .select("external_id, status, home_team_id, away_team_id")
+    .select("external_id, status, home_team_id, away_team_id, home_score, away_score")
     .eq("match_id", id)
     .maybeSingle();
 
@@ -76,16 +76,17 @@ export async function GET(
     }
   }
 
-  if (!detail) {
-    return NextResponse.json({ found: false, detail: null });
-  }
-
-  const sc = scorers(detail, homeId, awayId);
+  const sc = detail ? scorers(detail, homeId, awayId) : { home: [], away: [] };
   return NextResponse.json(
     {
-      found: true,
+      found: Boolean(detail) || Boolean(fix),
       status,
-      detail,
+      homeTeamId: homeId,
+      awayTeamId: awayId,
+      // Marcador EN VIVO (null si no ha empezado); el final está en mundial_results.
+      home: fix?.home_score ?? null,
+      away: fix?.away_score ?? null,
+      detail: detail ?? null,
       homeScorers: sc.home,
       awayScorers: sc.away,
     },
