@@ -46,7 +46,9 @@ interface Phase {
 function phaseOf(m: Match): Phase {
   if (m.stage === "group") {
     const md = m.matchday ?? 1;
-    return { key: `g${md}`, label: `Jornada ${md}`, order: md };
+    // Las eliminatorias van primero (order 10-15) y las jornadas después en
+    // orden descendente (J3, J2, J1) -> order 97, 98, 99.
+    return { key: `g${md}`, label: `Jornada ${md}`, order: 100 - md };
   }
   const KO_ORDER: Record<string, number> = {
     round32: 10,
