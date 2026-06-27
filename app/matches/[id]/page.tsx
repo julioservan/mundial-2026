@@ -10,6 +10,8 @@ import { LocalTime } from "@/components/LocalTime";
 import { getSupabase } from "@/lib/supabase/client";
 import { fetchResults } from "@/lib/results";
 import { stageLabel } from "@/lib/utils/format";
+import { MatchDetailView } from "@/components/MatchDetailView";
+import type { MatchDetail } from "@/lib/providers";
 import type { Pick } from "@/lib/scoring";
 
 interface PlayerLite {
@@ -29,6 +31,7 @@ export default function MatchDetailPage() {
     home: [],
     away: [],
   });
+  const [detail, setDetail] = useState<MatchDetail | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -53,6 +56,7 @@ export default function MatchDetailPage() {
             home: matchInfo.homeScorers ?? [],
             away: matchInfo.awayScorers ?? [],
           });
+          setDetail(matchInfo.detail ?? null);
         }
         setPicks(
           (picksRes.data ?? [])
@@ -168,6 +172,17 @@ export default function MatchDetailPage() {
           {match.venue.stadium} · {match.venue.city}
         </div>
       </div>
+
+      {/* Detalle del partido: cronología, alineaciones y estadísticas */}
+      {detail && (
+        <MatchDetailView
+          detail={detail}
+          homeId={match.homeTeamId}
+          awayId={match.awayTeamId}
+          home={home}
+          away={away}
+        />
+      )}
 
       {/* Pronósticos de la gente */}
       <h2 className="text-xl font-bold tracking-tight mb-4">
