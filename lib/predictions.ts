@@ -121,7 +121,9 @@ function toRow(userId: string, matchId: string, e: PredEntry) {
     pick: e.pick,
     home_score: e.home === "" ? null : Number(e.home),
     away_score: e.away === "" ? null : Number(e.away),
-    advance: e.advance,
+    // Solo incluimos `advance` si hay valor, para no depender de esa columna
+    // (la añade knockout-scoring.sql) salvo cuando de verdad hace falta.
+    ...(e.advance ? { advance: e.advance } : {}),
     updated_at: new Date().toISOString(),
   };
 }
