@@ -80,8 +80,10 @@ API-Football ──> /api/sync (cron, server) ──> Supabase ──> web (lee 
    | `CRON_SECRET` | Protege `/api/sync` |
    | `APIFOOTBALL_DAILY_CAP` (opc.) | Tope diario de peticiones (def. 95) |
 
-3. **Base de datos**: ejecuta `supabase/schema.sql` y luego
-   `supabase/api-football.sql` en el SQL Editor de Supabase.
+3. **Base de datos**: ejecuta en el SQL Editor de Supabase, en orden:
+   `supabase/schema.sql`, `supabase/api-football.sql` y
+   `supabase/match-detail.sql` (este último para la ficha de partido con
+   alineaciones/eventos/estadísticas).
 4. **Backfill inicial** (siembra los partidos para que la web no esté vacía):
 
    ```bash

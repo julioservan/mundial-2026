@@ -44,6 +44,47 @@ export interface ProviderCall<T> {
   rateLimit?: RateLimit;
 }
 
+// --- Detalle de un partido (alineaciones, eventos, estadísticas) ----------
+
+export interface LineupPlayer {
+  name: string;
+  number: number | null;
+  pos: string | null; // G/D/M/F
+  grid: string | null; // "fila:columna" para dibujar la formación
+}
+
+export interface TeamLineup {
+  teamId: string | null; // id nuestro
+  teamName: string;
+  formation: string | null; // p. ej. "4-3-3"
+  coach: string | null;
+  startXI: LineupPlayer[];
+  substitutes: LineupPlayer[];
+}
+
+export interface MatchEvent {
+  minute: number;
+  extra: number | null;
+  teamId: string | null;
+  teamName: string;
+  player: string | null;
+  assist: string | null;
+  type: string; // "Goal" | "Card" | "subst" | "Var"
+  detail: string; // "Normal Goal" | "Yellow Card" | ...
+}
+
+export interface TeamStat {
+  teamId: string | null;
+  teamName: string;
+  stats: { type: string; value: string | number | null }[];
+}
+
+export interface MatchDetail {
+  lineups: TeamLineup[];
+  events: MatchEvent[];
+  statistics: TeamStat[];
+}
+
 export interface ResultsProvider {
   readonly name: string;
   // Resuelve liga+temporada del Mundial 2026 (NO se hardcodea; se cachea).
@@ -52,4 +93,6 @@ export interface ResultsProvider {
   fetchAllFixtures(ls: LeagueSeason): Promise<ProviderCall<ProviderFixture[]>>;
   // Solo partidos en juego ahora mismo (barato, para ventanas activas).
   fetchLiveFixtures(ls: LeagueSeason): Promise<ProviderCall<ProviderFixture[]>>;
+  // Detalle de un partido por su id externo (3 llamadas: 11s, eventos, stats).
+  fetchFixtureDetail(externalId: number): Promise<ProviderCall<MatchDetail>>;
 }

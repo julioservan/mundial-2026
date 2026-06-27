@@ -10,10 +10,14 @@ import type { MatchStage, MatchStatus } from "@/types";
 import { teamIdFromName } from "@/lib/data/team-aliases";
 import type {
   LeagueSeason,
+  MatchDetail,
   ProviderCall,
   ProviderFixture,
   RateLimit,
   ResultsProvider,
+  TeamLineup,
+  MatchEvent,
+  TeamStat,
 } from "./types";
 
 const BASE = "https://v3.football.api-sports.io";
@@ -187,4 +191,90 @@ export const apiFootball: ResultsProvider = {
     );
     return { data: response.map(mapFixture), requests: 1, errors, rateLimit };
   },
+
+  async fetchFixtureDetail(externalId): Promise<ProviderCall<MatchDetail>> {
+    const [lineups, events, stats] = await Promise.all([
+      get<ApiLineup>(`/fixtures/lineups?fixture=${externalId}`),
+      get<ApiEvent>(`/fixtures/events?fixture=${externalId}`),
+      get<ApiStat>(`/fixtures/statistics?fixture=${externalId}`),
+    ]);
+    const errors = [...lineups.errors, ...events.errors, ...stats.errors];
+    const data: MatchDetail = {
+      lineups: lineups.response.map(mapLineup),
+      events: events.response.map(mapEvent),
+      statistics: stats.response.map(mapStat),
+    };
+    return {
+      data,
+      requests: 3,
+      errors,
+      rateLimit: stats.rateLimit ?? events.rateLimit ?? lineups.rateLimit,
+    };
+  },
 };
+
+// --- Detalle de partido: tipos crudos y mapeo ------------------------------
+
+interface ApiLineup {
+  team: { id: number; name: string };
+  formation: string | null;
+  coach: { name: string | null } | null;
+  startXI: { player: ApiLineupPlayer }[];
+  substitutes: { player: ApiLineupPlayer }[];
+}
+interface ApiLineupPlayer {
+  name: string;
+  number: number | null;
+  pos: string | null;
+  grid: string | null;
+}
+interface ApiEvent {
+  time: { elapsed: number | null; extra: number | null };
+  team: { name: string };
+  player: { name: string | null };
+  assist: { name: string | null };
+  type: string;
+  detail: string;
+}
+interface ApiStat {
+  team: { name: string };
+  statistics: { type: string; value: string | number | null }[];
+}
+
+function mapLineup(l: ApiLineup): TeamLineup {
+  const player = (p: ApiLineupPlayer) => ({
+    name: p.name,
+    number: p.number ?? null,
+    pos: p.pos ?? null,
+    grid: p.grid ?? null,
+  });
+  return {
+    teamId: teamIdFromName(l.team.name),
+    teamName: l.team.name,
+    formation: l.formation ?? null,
+    coach: l.coach?.name ?? null,
+    startXI: (l.startXI ?? []).map((x) => player(x.player)),
+    substitutes: (l.substitutes ?? []).map((x) => player(x.player)),
+  };
+}
+
+function mapEvent(e: ApiEvent): MatchEvent {
+  return {
+    minute: e.time.elapsed ?? 0,
+    extra: e.time.extra ?? null,
+    teamId: teamIdFromName(e.team.name),
+    teamName: e.team.name,
+    player: e.player?.name ?? null,
+    assist: e.assist?.name ?? null,
+    type: e.type,
+    detail: e.detail,
+  };
+}
+
+function mapStat(s: ApiStat): TeamStat {
+  return {
+    teamId: teamIdFromName(s.team.name),
+    teamName: s.team.name,
+    stats: (s.statistics ?? []).map((x) => ({ type: x.type, value: x.value })),
+  };
+}
