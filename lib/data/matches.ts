@@ -206,6 +206,33 @@ export const MATCHES: Match[] = [
 export const GROUP_MATCHES = MATCHES.filter((m) => m.stage === "group");
 export const KNOCKOUT_MATCHES = MATCHES.filter((m) => m.stage !== "group");
 
+// Ids de las llaves de eliminatoria por ronda, en orden. Lo consume el motor
+// de bracket (lib/bracket.ts) y el poller para mapear los partidos del feed.
+export const KNOCKOUT_SLOTS = {
+  round32: KNOCKOUT_MATCHES.filter((m) => m.stage === "round32").map((m) => m.id),
+  round16: KNOCKOUT_MATCHES.filter((m) => m.stage === "round16").map((m) => m.id),
+  quarterfinal: KNOCKOUT_MATCHES.filter((m) => m.stage === "quarterfinal").map((m) => m.id),
+  semifinal: KNOCKOUT_MATCHES.filter((m) => m.stage === "semifinal").map((m) => m.id),
+  third_place: KNOCKOUT_MATCHES.find((m) => m.stage === "third_place")?.id ?? "",
+  final: KNOCKOUT_MATCHES.find((m) => m.stage === "final")?.id ?? "",
+};
+
+// Índice de partidos de grupo por par de equipos (ordenado) -> id + orientación.
+// Permite mapear un partido del feed (que solo trae nombres) a nuestro id.
+const GROUP_BY_PAIR = new Map<string, { id: string; home: string; away: string }>();
+for (const m of GROUP_MATCHES) {
+  if (!m.homeTeamId || !m.awayTeamId) continue;
+  const key = [m.homeTeamId, m.awayTeamId].sort().join("-");
+  GROUP_BY_PAIR.set(key, { id: m.id, home: m.homeTeamId, away: m.awayTeamId });
+}
+
+export function groupMatchByPair(
+  a: string,
+  b: string,
+): { id: string; home: string; away: string } | undefined {
+  return GROUP_BY_PAIR.get([a, b].sort().join("-"));
+}
+
 export function matchesByGroup(group: GroupId): Match[] {
   return GROUP_MATCHES.filter((m) => m.group === group);
 }

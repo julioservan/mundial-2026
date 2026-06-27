@@ -50,19 +50,23 @@ create policy "mundial_meta_write_admin"
   );
 
 -- ---------------------------------------------------------------------------
--- Composición de las llaves de eliminatoria. Los MARCADORES siguen en
--- `mundial_results` (no se duplican aquí); esta tabla solo guarda QUÉ equipos
--- ocupan cada partido (`home_team_id`/`away_team_id` = ids nuestros, NULL = TBD)
--- y el estado, según los va publicando el feed. El frontend la usa para pintar
--- el cuadro con los equipos reales en lugar de "Por definir".
+-- Snapshot por partido desde el feed: QUÉ equipos juegan (clave para pintar el
+-- cuadro de eliminatoria con equipos reales en vez de "Por definir") y el estado
+-- + marcador EN VIVO para que la web nunca tenga que llamar a la API externa.
+--
+-- Reparto de responsabilidades:
+--   · mundial_results  -> marcador FINAL oficial (puntúa la quiniela y la tabla)
+--   · mundial_fixtures -> snapshot en vivo (estado, marcador actual, equipos)
 -- ---------------------------------------------------------------------------
 create table if not exists public.mundial_fixtures (
-  match_id     text primary key,            -- id nuestro (p. ej. K-round32-1)
+  match_id     text primary key,            -- id nuestro (p. ej. K-round32-1 / wc-A-1)
   external_id  bigint,                      -- id del partido en el proveedor
   stage        text not null,
   "group"      text,
   home_team_id text,                        -- id nuestro o NULL (TBD)
   away_team_id text,
+  home_score   smallint,                    -- marcador EN VIVO (NULL si no empezó)
+  away_score   smallint,
   status       text not null default 'scheduled',
   kickoff      timestamptz,
   updated_at   timestamptz not null default now()

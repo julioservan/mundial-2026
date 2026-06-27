@@ -127,7 +127,7 @@ export function computeBracket(input: BracketInput): {
   }
 
   // --- Dieciseisavos (R32): equipos desde proveedor o proyección (seed). ---
-  const r32 = slots.round32.map((id, i) => {
+  const r32 = slots.round32.map((id) => {
     const s = seed[id];
     return build(
       id,
