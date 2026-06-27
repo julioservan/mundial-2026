@@ -235,6 +235,7 @@ export function PredictionForm({ matches }: Props) {
 
     const inPhase = enriched
       .filter((m) => phaseOf(m).key === effectivePhase)
+      .sort((a, b) => b.kickoff.localeCompare(a.kickoff))
       .filter(canFill);
     const idx = inPhase.findIndex((m) => m.id === matchId);
     let next =
@@ -318,7 +319,9 @@ export function PredictionForm({ matches }: Props) {
   const playable = enriched.filter(isPlayable);
   const completed = playable.filter((m) => picks[m.id]).length;
   const progress = playable.length > 0 ? (completed / playable.length) * 100 : 0;
-  const visibleMatches = enriched.filter((m) => phaseOf(m).key === effectivePhase);
+  const visibleMatches = enriched
+    .filter((m) => phaseOf(m).key === effectivePhase)
+    .sort((a, b) => b.kickoff.localeCompare(a.kickoff));
   const phasePicked = (key: string) =>
     enriched.filter((m) => phaseOf(m).key === key && isPlayable(m) && picks[m.id]).length;
   const phaseTotal = (key: string) =>
