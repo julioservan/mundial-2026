@@ -53,15 +53,7 @@ export function TopScorers() {
               {i + 1}
             </span>
 
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={p.photo ?? ""}
-              alt=""
-              width={40}
-              height={40}
-              loading="lazy"
-              className="w-10 h-10 rounded-full object-cover bg-surface-muted shrink-0"
-            />
+            <ScorerPhoto name={p.name} photo={p.photo} />
 
             <div className="min-w-0 flex-1">
               <div className="font-semibold tracking-tight truncate">{p.name}</div>
@@ -94,5 +86,38 @@ export function TopScorers() {
         );
       })}
     </ol>
+  );
+}
+
+// Foto del jugador con fallback a iniciales si el CDN la bloquea o falla.
+function ScorerPhoto({ name, photo }: { name: string; photo: string | null }) {
+  const [failed, setFailed] = useState(false);
+  const initials = name
+    .split(" ")
+    .map((w) => w[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  if (!photo || failed) {
+    return (
+      <div className="w-10 h-10 rounded-full bg-surface-muted shrink-0 flex items-center justify-center text-[11px] font-semibold text-muted-foreground">
+        {initials || "?"}
+      </div>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={photo}
+      alt={name}
+      width={40}
+      height={40}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+      className="w-10 h-10 rounded-full object-cover bg-surface-muted shrink-0"
+    />
   );
 }
