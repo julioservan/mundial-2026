@@ -22,6 +22,8 @@ const FULL_SYNC_INTERVAL_MIN = Number(
 // Anti-rebote: ignora llamadas auto/live si la última fue hace menos de esto
 // (protege la cuota si el endpoint recibe pings demasiado seguidos).
 const MIN_SYNC_INTERVAL_SEC = Number(process.env.APIFOOTBALL_MIN_INTERVAL_SEC ?? 50);
+// Goleadores (Bota de Oro): cambia despacio, se refresca como mucho cada X min.
+const SCORERS_INTERVAL_MIN = Number(process.env.APIFOOTBALL_SCORERS_MIN ?? 180);
 // Un partido se considera "activo" desde 5 min antes hasta 140 min después.
 const WINDOW_PRE_MS = 5 * 60_000;
 const WINDOW_POST_MS = 140 * 60_000;
@@ -358,6 +360,29 @@ export async function runSync(
       resultsUpserted += p.results;
       ranFull = true;
       await setMeta("last_full_sync", { at: new Date().toISOString() });
+
+      // Goleadores (Bota de Oro): refresco lento, 1 petición extra.
+      const lastScorers = await getMeta<{ at: string }>("last_scorers_sync");
+      const scorersStale =
+        !lastScorers ||
+        Date.now() - new Date(lastScorers.at).getTime() >
+          SCORERS_INTERVAL_MIN * 60_000;
+      if (scorersStale && (await capLeft())) {
+        const sc = await provider.fetchTopScorers(ls);
+        errors.push(...sc.errors);
+        await addRequests(sc.requests);
+        if (sc.rateLimit) {
+          providerRemaining = sc.rateLimit.remaining ?? providerRemaining;
+          providerLimit = sc.rateLimit.limit ?? providerLimit;
+        }
+        if (sc.errors.length === 0) {
+          await setMeta("top_scorers", {
+            at: new Date().toISOString(),
+            players: sc.data,
+          });
+          await setMeta("last_scorers_sync", { at: new Date().toISOString() });
+        }
+      }
     } else {
       note = "Cuota diaria agotada: se sirve el último dato.";
     }

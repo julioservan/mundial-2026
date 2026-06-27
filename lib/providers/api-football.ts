@@ -18,6 +18,7 @@ import type {
   TeamLineup,
   MatchEvent,
   TeamStat,
+  TopScorer,
 } from "./types";
 
 const BASE = "https://v3.football.api-sports.io";
@@ -211,7 +212,38 @@ export const apiFootball: ResultsProvider = {
       rateLimit: stats.rateLimit ?? events.rateLimit ?? lineups.rateLimit,
     };
   },
+
+  async fetchTopScorers(ls): Promise<ProviderCall<TopScorer[]>> {
+    const { response, errors, rateLimit } = await get<ApiScorer>(
+      `/players/topscorers?league=${ls.leagueId}&season=${ls.season}`,
+    );
+    return { data: response.map(mapScorer), requests: 1, errors, rateLimit };
+  },
 };
+
+// --- Goleadores: tipos crudos y mapeo --------------------------------------
+
+interface ApiScorer {
+  player: { name: string; photo: string | null };
+  statistics: {
+    team: { name: string };
+    goals: { total: number | null; assists: number | null };
+    penalty: { scored: number | null };
+  }[];
+}
+
+function mapScorer(s: ApiScorer): TopScorer {
+  const st = s.statistics?.[0];
+  return {
+    name: s.player.name,
+    teamId: teamIdFromName(st?.team.name),
+    teamName: st?.team.name ?? "",
+    photo: s.player.photo ?? null,
+    goals: st?.goals.total ?? 0,
+    assists: st?.goals.assists ?? 0,
+    penalties: st?.penalty.scored ?? 0,
+  };
+}
 
 // --- Detalle de partido: tipos crudos y mapeo ------------------------------
 
