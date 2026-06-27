@@ -161,10 +161,8 @@ export function PredictionForm({ matches }: Props) {
       if (user) {
         try {
           const remote = await fetchRemote(user.id);
-          const orphans = Object.keys(remote).filter((id) => !validIds.has(id));
-          for (const id of orphans) {
-            void deleteRemote(user.id, id).catch(() => {});
-          }
+          // NO borramos pronósticos "huérfanos": aunque un match_id no esté en el
+          // calendario actual, conservamos la fila del usuario (evita pérdidas).
           const remoteValid = onlyValid(remote);
           const local = onlyValid(loadLocal());
           if (Object.keys(remoteValid).length === 0 && hasAnyPick(local)) {
