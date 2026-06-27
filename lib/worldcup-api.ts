@@ -1,72 +1,11 @@
 import { GROUP_MATCHES } from "@/lib/data/matches";
+import { NAME_TO_ID } from "@/lib/data/team-aliases";
 
-// Integración con la API pública worldcup26.ir (datos del Mundial 2026).
-// Mapea sus partidos con los nuestros por grupo + equipos.
+// Adaptador LEGACY: API pública worldcup26.ir (datos del Mundial 2026).
+// El proveedor principal ahora es API-Football (lib/providers/). Esto se
+// conserva como respaldo opcional y mapea por grupo + equipos.
 
 const API_URL = "https://worldcup26.ir/get/games";
-
-// Nombre en inglés de la API -> id de equipo nuestro (lib/data/teams.ts).
-const NAME_TO_ID: Record<string, string> = {
-  Mexico: "mex",
-  "South Africa": "rsa",
-  "South Korea": "kor",
-  "Korea Republic": "kor",
-  "Czech Republic": "cze",
-  Czechia: "cze",
-  Canada: "can",
-  Switzerland: "sui",
-  Qatar: "qat",
-  "Bosnia and Herzegovina": "bih",
-  Brazil: "bra",
-  Morocco: "mar",
-  Scotland: "sco",
-  Haiti: "hai",
-  "United States": "usa",
-  "United States of America": "usa",
-  USA: "usa",
-  Paraguay: "par",
-  Australia: "aus",
-  Turkey: "tur",
-  "Türkiye": "tur",
-  Turkiye: "tur",
-  Germany: "ger",
-  Ecuador: "ecu",
-  "Ivory Coast": "civ",
-  "Côte d'Ivoire": "civ",
-  "Cote d'Ivoire": "civ",
-  Netherlands: "ned",
-  Japan: "jpn",
-  Sweden: "swe",
-  Tunisia: "tun",
-  "Curaçao": "cuw",
-  Curacao: "cuw",
-  Belgium: "bel",
-  Egypt: "egy",
-  Iran: "irn",
-  "New Zealand": "nzl",
-  Spain: "esp",
-  Uruguay: "uru",
-  "Saudi Arabia": "ksa",
-  "Cape Verde": "cpv",
-  "Cabo Verde": "cpv",
-  France: "fra",
-  Senegal: "sen",
-  Iraq: "irq",
-  Norway: "nor",
-  Argentina: "arg",
-  Austria: "aut",
-  Algeria: "alg",
-  Jordan: "jor",
-  Portugal: "por",
-  Colombia: "col",
-  Uzbekistan: "uzb",
-  "Democratic Republic of the Congo": "cod",
-  "DR Congo": "cod",
-  England: "eng",
-  Croatia: "cro",
-  Ghana: "gha",
-  Panama: "pan",
-};
 
 // Índice de nuestros partidos de grupo por grupo + pareja de equipos.
 const matchByTeams = new Map<
