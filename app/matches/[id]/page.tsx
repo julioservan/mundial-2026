@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { MATCHES } from "@/lib/data/matches";
@@ -32,57 +32,84 @@ export default function MatchDetailPage() {
     away: [],
   });
   const [detail, setDetail] = useState<MatchDetail | null>(null);
+  const [info, setInfo] = useState<{
+    status?: string;
+    home?: number | null;
+    away?: number | null;
+    homeTeamId?: string | null;
+    awayTeamId?: string | null;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Estado del partido + marcador en vivo + cronología (refrescable en directo).
+  const fetchLive = useCallback(async () => {
+    const [mi, results] = await Promise.all([
+      fetch(`/api/match/${id}`)
+        .then((r) => r.json())
+        .catch(() => null),
+      fetchResults().catch(
+        () => ({}) as Record<string, { home: string; away: string }>,
+      ),
+    ]);
+    if (mi && mi.found) {
+      setInfo({
+        status: mi.status,
+        home: mi.home,
+        away: mi.away,
+        homeTeamId: mi.homeTeamId,
+        awayTeamId: mi.awayTeamId,
+      });
+      setScorers({ home: mi.homeScorers ?? [], away: mi.awayScorers ?? [] });
+      setDetail(mi.detail ?? null);
+    }
+    setResult(results[id] ?? null);
+  }, [id]);
 
   useEffect(() => {
     let active = true;
     async function load() {
       try {
         const supabase = getSupabase();
-        const [picksRes, profsRes, results, matchInfo] = await Promise.all([
+        const [picksRes, profsRes] = await Promise.all([
           supabase
             .from("mundial_predictions")
             .select("user_id, pick")
             .eq("match_id", id),
           supabase.from("mundial_profiles").select("id, username, avatar_url"),
-          fetchResults(),
-          fetch(`/api/match/${id}`)
-            .then((r) => r.json())
-            .catch(() => null),
         ]);
-        if (!active) return;
-        if (matchInfo?.found) {
-          setScorers({
-            home: matchInfo.homeScorers ?? [],
-            away: matchInfo.awayScorers ?? [],
-          });
-          setDetail(matchInfo.detail ?? null);
+        if (active) {
+          setPicks(
+            (picksRes.data ?? [])
+              .filter((r) => r.pick)
+              .map((r) => ({ userId: r.user_id as string, pick: r.pick as Pick })),
+          );
+          const profs: Record<string, PlayerLite> = {};
+          for (const p of profsRes.data ?? []) {
+            profs[p.id as string] = {
+              username: p.username as string,
+              avatar_url: (p.avatar_url as string | null) ?? null,
+            };
+          }
+          setPlayers(profs);
         }
-        setPicks(
-          (picksRes.data ?? [])
-            .filter((r) => r.pick)
-            .map((r) => ({ userId: r.user_id as string, pick: r.pick as Pick })),
-        );
-        const profs: Record<string, PlayerLite> = {};
-        for (const p of profsRes.data ?? []) {
-          profs[p.id as string] = {
-            username: p.username as string,
-            avatar_url: (p.avatar_url as string | null) ?? null,
-          };
-        }
-        setPlayers(profs);
-        setResult(results[id] ?? null);
       } catch {
         // sin datos
-      } finally {
-        if (active) setLoading(false);
       }
+      await fetchLive();
+      if (active) setLoading(false);
     }
     void load();
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, fetchLive]);
+
+  // Mientras el partido esté en vivo, refresca marcador y cronología cada 45 s.
+  useEffect(() => {
+    if (info?.status !== "live") return;
+    const t = setInterval(() => void fetchLive(), 45_000);
+    return () => clearInterval(t);
+  }, [info?.status, fetchLive]);
 
   if (!match) {
     return (
@@ -98,9 +125,11 @@ export default function MatchDetailPage() {
     );
   }
 
-  const home = getTeam(match.homeTeamId);
-  const away = getTeam(match.awayTeamId);
+  const home = getTeam(info?.homeTeamId ?? match.homeTeamId);
+  const away = getTeam(info?.awayTeamId ?? match.awayTeamId);
   const finished = Boolean(result && result.home !== "" && result.away !== "");
+  const isLive = info?.status === "live";
+  const hasLiveScore = info != null && info.home != null && info.away != null;
   const byPick = (p: Pick) => picks.filter((e) => e.pick === p);
 
   return (
@@ -119,6 +148,13 @@ export default function MatchDetailPage() {
           {match.matchday ? ` · Jornada ${match.matchday}` : ""} ·{" "}
           <LocalTime iso={match.kickoff} />
         </div>
+        {isLive && (
+          <div className="text-center mb-3">
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-pink animate-pulse">
+              ● EN VIVO
+            </span>
+          </div>
+        )}
         <div className="flex items-center justify-center gap-3">
           <div className="flex-1 text-right min-w-0">
             <div className="text-4xl leading-none" aria-hidden>
@@ -128,10 +164,14 @@ export default function MatchDetailPage() {
               {home?.name ?? "Por definir"}
             </div>
           </div>
-          <div className="shrink-0 font-display leading-none px-2">
+          <div className="shrink-0 font-display leading-none px-2 text-center">
             {finished ? (
               <span className="text-4xl text-foreground">
                 {result!.home}–{result!.away}
+              </span>
+            ) : isLive && hasLiveScore ? (
+              <span className="text-4xl text-pink">
+                {info!.home}–{info!.away}
               </span>
             ) : (
               <span className="text-2xl text-muted-foreground">vs</span>
