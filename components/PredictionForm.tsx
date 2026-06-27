@@ -67,7 +67,8 @@ export function PredictionForm({ matches }: Props) {
   const [hydrated, setHydrated] = useState(false);
   const [status, setStatus] = useState<SyncStatus>("idle");
   const [now, setNow] = useState(() => Date.now());
-  const [activePhase, setActivePhase] = useState("g1");
+  // null = sin elección manual aún (se usa la pestaña por defecto).
+  const [activePhase, setActivePhase] = useState<string | null>(null);
   const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const enriched = useMemo<Match[]>(
@@ -91,14 +92,30 @@ export function PredictionForm({ matches }: Props) {
   const phases = useMemo<Phase[]>(() => {
     const map = new Map<string, Phase>();
     for (const m of enriched) {
-      if (isKnockout(m) && !enriched.some((x) => x.stage === m.stage && isPlayable(x))) {
-        continue;
+      if (isKnockout(m)) {
+        const anyPlayable = enriched.some(
+          (x) => x.stage === m.stage && isPlayable(x),
+        );
+        // Dieciseisavos siempre visible (es la pestaña por defecto); el resto de
+        // rondas KO solo aparecen cuando ya hay cruces con equipos.
+        if (m.stage !== "round32" && !anyPlayable) continue;
       }
       const p = phaseOf(m);
       map.set(p.key, p);
     }
     return [...map.values()].sort((a, b) => a.order - b.order);
   }, [enriched]);
+
+  // Pestaña efectiva: la elegida por el usuario si sigue existiendo; si no,
+  // dieciseisavos (round32) por defecto, o la primera disponible.
+  const effectivePhase = useMemo(() => {
+    if (activePhase && phases.some((p) => p.key === activePhase)) {
+      return activePhase;
+    }
+    return (
+      phases.find((p) => p.key === "round32")?.key ?? phases[0]?.key ?? "g1"
+    );
+  }, [activePhase, phases]);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
@@ -252,7 +269,7 @@ export function PredictionForm({ matches }: Props) {
   const playable = enriched.filter(isPlayable);
   const completed = playable.filter((m) => picks[m.id]).length;
   const progress = playable.length > 0 ? (completed / playable.length) * 100 : 0;
-  const visibleMatches = enriched.filter((m) => phaseOf(m).key === activePhase);
+  const visibleMatches = enriched.filter((m) => phaseOf(m).key === effectivePhase);
   const phasePicked = (key: string) =>
     enriched.filter((m) => phaseOf(m).key === key && isPlayable(m) && picks[m.id]).length;
   const phaseTotal = (key: string) =>
@@ -321,14 +338,14 @@ export function PredictionForm({ matches }: Props) {
             key={p.key}
             onClick={() => setActivePhase(p.key)}
             className={`shrink-0 px-4 py-2 rounded-full text-sm font-semibold border transition-colors ${
-              activePhase === p.key
+              effectivePhase === p.key
                 ? "border-accent bg-accent text-accent-foreground"
                 : "border-border text-muted-foreground hover:bg-surface-muted"
             }`}
           >
             {p.label}
             <span
-              className={`ml-1.5 text-xs ${activePhase === p.key ? "opacity-80" : "opacity-60"}`}
+              className={`ml-1.5 text-xs ${effectivePhase === p.key ? "opacity-80" : "opacity-60"}`}
             >
               {phasePicked(p.key)}/{phaseTotal(p.key)}
             </span>
