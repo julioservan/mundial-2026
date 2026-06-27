@@ -16,4 +16,5 @@ export type {
   LineupPlayer,
   MatchEvent,
   TeamStat,
+  TopScorer,
 } from "./types";

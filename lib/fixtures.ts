@@ -1,5 +1,6 @@
 import { getSupabase } from "@/lib/supabase/client";
 import type { SlotAssignment } from "@/lib/bracket";
+import type { TopScorer } from "@/lib/providers";
 
 // Snapshot de partidos desde el feed (mundial_fixtures), indexado por match_id.
 // Lo usa el cuadro de eliminatoria para mostrar equipos reales y estado en vivo.
@@ -47,4 +48,19 @@ export async function fetchFreshness(): Promise<DataFreshness | null> {
     count: v.count ?? 0,
     cap: v.cap ?? 0,
   };
+}
+
+// Máximos goleadores (Bota de Oro) desde mundial_meta.
+export async function fetchTopScorers(): Promise<{
+  at: string;
+  players: TopScorer[];
+}> {
+  const { data, error } = await getSupabase()
+    .from("mundial_meta")
+    .select("value")
+    .eq("key", "top_scorers")
+    .maybeSingle();
+  if (error || !data) return { at: "", players: [] };
+  const v = data.value as { at?: string; players?: TopScorer[] };
+  return { at: v.at ?? "", players: v.players ?? [] };
 }

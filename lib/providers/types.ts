@@ -85,6 +85,18 @@ export interface MatchDetail {
   statistics: TeamStat[];
 }
 
+// --- Goleadores (Bota de Oro) ---------------------------------------------
+
+export interface TopScorer {
+  name: string;
+  teamId: string | null; // selección, mapeada a nuestro id
+  teamName: string;
+  photo: string | null;
+  goals: number;
+  assists: number;
+  penalties: number;
+}
+
 export interface ResultsProvider {
   readonly name: string;
   // Resuelve liga+temporada del Mundial 2026 (NO se hardcodea; se cachea).
@@ -95,4 +107,6 @@ export interface ResultsProvider {
   fetchLiveFixtures(ls: LeagueSeason): Promise<ProviderCall<ProviderFixture[]>>;
   // Detalle de un partido por su id externo (3 llamadas: 11s, eventos, stats).
   fetchFixtureDetail(externalId: number): Promise<ProviderCall<MatchDetail>>;
+  // Máximos goleadores de la liga/temporada (Bota de Oro).
+  fetchTopScorers(ls: LeagueSeason): Promise<ProviderCall<TopScorer[]>>;
 }
