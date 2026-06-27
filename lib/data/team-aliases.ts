@@ -12,6 +12,7 @@ export const NAME_TO_ID: Record<string, string> = {
   Switzerland: "sui",
   Qatar: "qat",
   "Bosnia and Herzegovina": "bih",
+  "Bosnia & Herzegovina": "bih",
   Brazil: "bra",
   Morocco: "mar",
   Scotland: "sco",
@@ -43,6 +44,7 @@ export const NAME_TO_ID: Record<string, string> = {
   Uruguay: "uru",
   "Saudi Arabia": "ksa",
   "Cape Verde": "cpv",
+  "Cape Verde Islands": "cpv",
   "Cabo Verde": "cpv",
   France: "fra",
   Senegal: "sen",
@@ -57,6 +59,7 @@ export const NAME_TO_ID: Record<string, string> = {
   Uzbekistan: "uzb",
   "Democratic Republic of the Congo": "cod",
   "DR Congo": "cod",
+  "Congo DR": "cod",
   England: "eng",
   Croatia: "cro",
   Ghana: "gha",
@@ -70,10 +73,15 @@ export function teamIdFromName(name?: string | null): string | null {
   if (NAME_TO_ID[name]) return NAME_TO_ID[name];
   const norm = name.trim();
   if (NAME_TO_ID[norm]) return NAME_TO_ID[norm];
-  // Búsqueda case-insensitive como último recurso.
+  // Normaliza "&" -> "and" por si el proveedor cambia el separador.
+  const amp = norm.replace(/\s*&\s*/g, " and ");
+  if (NAME_TO_ID[amp]) return NAME_TO_ID[amp];
+  // Búsqueda case-insensitive como último recurso (con y sin normalizar "&").
   const lower = norm.toLowerCase();
+  const lowerAmp = amp.toLowerCase();
   for (const [k, v] of Object.entries(NAME_TO_ID)) {
-    if (k.toLowerCase() === lower) return v;
+    const kl = k.toLowerCase();
+    if (kl === lower || kl === lowerAmp) return v;
   }
   return null;
 }
