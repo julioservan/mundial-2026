@@ -307,7 +307,10 @@ function MatchRow({
 
   return (
     <li className="bg-surface border border-border rounded-2xl p-4">
-      <div className="flex items-center gap-3">
+      <Link
+        href={`/matches/${matchId}`}
+        className="flex items-center gap-3 -m-1 p-1.5 rounded-lg hover:bg-surface-muted/40 transition-colors"
+      >
         <div className="flex-1 flex items-center justify-end gap-2 text-sm font-semibold tracking-tight min-w-0">
           <span className="truncate text-right">{home?.name}</span>
           <span className="text-xl shrink-0" aria-hidden>
@@ -359,7 +362,7 @@ function MatchRow({
           </span>
           <span className="truncate">{away?.name}</span>
         </div>
-      </div>
+      </Link>
 
       {/* Pronósticos de la gente para este partido */}
       <div className="mt-3 pt-3 border-t border-border/60">
