@@ -28,12 +28,20 @@ export interface ProviderFixture {
   kickoff: string; // ISO 8601
 }
 
+// Límite de cuota informado por el PROPIO proveedor (cabeceras de la respuesta),
+// como red de seguridad además de nuestro contador interno.
+export interface RateLimit {
+  remaining: number | null; // peticiones que te quedan hoy
+  limit: number | null; // tope diario del plan
+}
+
 // Resultado de cualquier llamada: datos + nº de peticiones consumidas + errores
 // (el campo `errors` de API-Football: cuota agotada, parámetros, etc.).
 export interface ProviderCall<T> {
   data: T;
   requests: number;
   errors: string[];
+  rateLimit?: RateLimit;
 }
 
 export interface ResultsProvider {

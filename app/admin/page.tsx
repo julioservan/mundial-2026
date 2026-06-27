@@ -16,6 +16,12 @@ const SECTIONS = [
     desc: "Gestiona los niveles: convierte jugadores en admin o quítales el nivel.",
     icon: "👤",
   },
+  {
+    href: "/admin/sync",
+    title: "Sincronización",
+    desc: "Estado del robot de datos: última sync, cuota, liga detectada y errores.",
+    icon: "📡",
+  },
 ];
 
 export default function AdminHubPage() {

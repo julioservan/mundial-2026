@@ -12,16 +12,33 @@ import type {
   LeagueSeason,
   ProviderCall,
   ProviderFixture,
+  RateLimit,
   ResultsProvider,
 } from "./types";
 
 const BASE = "https://v3.football.api-sports.io";
 const SEASON = 2026; // año del torneo; la LIGA se resuelve dinámicamente.
+const MAX_RETRIES = 3; // reintentos ante errores temporales (red / 5xx / 429)
 
 function key(): string {
   const k = process.env.APIFOOTBALL_KEY;
   if (!k) throw new Error("Falta APIFOOTBALL_KEY (solo servidor)");
   return k;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function readRateLimit(res: Response): RateLimit {
+  const num = (h: string): number | null => {
+    const v = res.headers.get(h);
+    return v == null || v === "" ? null : Number(v);
+  };
+  return {
+    remaining: num("x-ratelimit-requests-remaining"),
+    limit: num("x-ratelimit-requests-limit"),
+  };
 }
 
 // Normaliza el campo `errors` de la respuesta (objeto vacío, objeto o array).
@@ -38,22 +55,36 @@ function normalizeErrors(errors: unknown): string[] {
 
 async function get<T = unknown>(
   path: string,
-): Promise<{ response: T[]; errors: string[] }> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { "x-apisports-key": key() },
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    return { response: [], errors: [`HTTP ${res.status}`] };
+): Promise<{ response: T[]; errors: string[]; rateLimit?: RateLimit }> {
+  let lastErr = "desconocido";
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    if (attempt > 0) await sleep(500 * attempt); // backoff: 0, 500ms, 1000ms
+    try {
+      const res = await fetch(`${BASE}${path}`, {
+        headers: { "x-apisports-key": key() },
+        cache: "no-store",
+      });
+      // 5xx y 429 (rate limit) son temporales: reintentar.
+      if (res.status >= 500 || res.status === 429) {
+        lastErr = `HTTP ${res.status}`;
+        continue;
+      }
+      const rateLimit = readRateLimit(res);
+      if (!res.ok) {
+        return { response: [], errors: [`HTTP ${res.status}`], rateLimit };
+      }
+      const json = (await res.json()) as { response?: T[]; errors?: unknown };
+      return {
+        response: json.response ?? [],
+        errors: normalizeErrors(json.errors),
+        rateLimit,
+      };
+    } catch (e) {
+      // Error de red / timeout: reintentar.
+      lastErr = String(e);
+    }
   }
-  const json = (await res.json()) as {
-    response?: T[];
-    errors?: unknown;
-  };
-  return {
-    response: json.response ?? [],
-    errors: normalizeErrors(json.errors),
-  };
+  return { response: [], errors: [`tras ${MAX_RETRIES} intentos: ${lastErr}`] };
 }
 
 // --- Mapeos del proveedor a nuestro dominio -------------------------------
@@ -114,7 +145,7 @@ export const apiFootball: ResultsProvider = {
     // Cuidado: existen varias "World Cup" — Mundial de clubes, femenino,
     // clasificación, sub-XX, olímpico… Hay que descartarlas y quedarnos con el
     // Mundial masculino de selecciones (en API-Football es la liga id 1).
-    const { response, errors } = await get<ApiLeague>(
+    const { response, errors, rateLimit } = await get<ApiLeague>(
       "/leagues?search=World%20Cup",
     );
 
@@ -140,20 +171,20 @@ export const apiFootball: ResultsProvider = {
       .sort((a, b) => b.score - a.score)[0]?.l;
 
     const data = best ? { leagueId: best.league.id, season: SEASON } : null;
-    return { data, requests: 1, errors };
+    return { data, requests: 1, errors, rateLimit };
   },
 
   async fetchAllFixtures(ls): Promise<ProviderCall<ProviderFixture[]>> {
-    const { response, errors } = await get<ApiFixture>(
+    const { response, errors, rateLimit } = await get<ApiFixture>(
       `/fixtures?league=${ls.leagueId}&season=${ls.season}`,
     );
-    return { data: response.map(mapFixture), requests: 1, errors };
+    return { data: response.map(mapFixture), requests: 1, errors, rateLimit };
   },
 
   async fetchLiveFixtures(ls): Promise<ProviderCall<ProviderFixture[]>> {
-    const { response, errors } = await get<ApiFixture>(
+    const { response, errors, rateLimit } = await get<ApiFixture>(
       `/fixtures?league=${ls.leagueId}&season=${ls.season}&live=all`,
     );
-    return { data: response.map(mapFixture), requests: 1, errors };
+    return { data: response.map(mapFixture), requests: 1, errors, rateLimit };
   },
 };

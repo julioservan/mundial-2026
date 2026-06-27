@@ -40,6 +40,8 @@ export interface SyncSummary {
   resultsUpserted: number;
   errors: string[];
   note: string;
+  providerRemaining: number | null; // cuota que informa el propio proveedor
+  unknownTeams: string[]; // nombres del feed que no supimos mapear
 }
 
 // --- Metadatos (mundial_meta) ---------------------------------------------
@@ -138,15 +140,20 @@ interface ResultRow {
 export function mapFixtures(fixtures: ProviderFixture[]): {
   fixtures: FixtureRow[];
   results: ResultRow[];
+  unknown: string[];
 } {
   const fixtureRows: FixtureRow[] = [];
   const resultRows: ResultRow[] = [];
+  const unknown = new Set<string>();
 
   // Agrupamos las eliminatorias por etapa para asignarlas a nuestros slots.
   const knockoutByStage = new Map<string, ProviderFixture[]>();
 
   for (const f of fixtures) {
     if (f.stage === "group") {
+      // Nombre presente pero sin mapear -> lo anotamos para revisarlo.
+      if (f.homeName && !f.homeTeamId) unknown.add(f.homeName);
+      if (f.awayName && !f.awayTeamId) unknown.add(f.awayName);
       if (!f.homeTeamId || !f.awayTeamId) continue;
       const ours = groupMatchByPair(f.homeTeamId, f.awayTeamId);
       if (!ours) continue;
@@ -208,7 +215,7 @@ export function mapFixtures(fixtures: ProviderFixture[]): {
     });
   }
 
-  return { fixtures: fixtureRows, results: resultRows };
+  return { fixtures: fixtureRows, results: resultRows, unknown: [...unknown] };
 }
 
 function slotsForStage(stage: string): string[] {
@@ -278,6 +285,9 @@ export async function runSync(
   let fixturesUpserted = 0;
   let resultsUpserted = 0;
   let note = "";
+  let providerRemaining: number | null = null;
+  let providerLimit: number | null = null;
+  const unknownTeams = new Set<string>();
 
   const dailyBefore = await getDailyCount();
 
@@ -300,6 +310,8 @@ export async function runSync(
         resultsUpserted: 0,
         errors: [],
         note: "Throttled: sincronización muy reciente.",
+        providerRemaining: null,
+        unknownTeams: [],
       };
     }
   }
@@ -334,7 +346,12 @@ export async function runSync(
       const r = await provider.fetchAllFixtures(ls);
       errors.push(...r.errors);
       await addRequests(r.requests);
+      if (r.rateLimit) {
+        providerRemaining = r.rateLimit.remaining ?? providerRemaining;
+        providerLimit = r.rateLimit.limit ?? providerLimit;
+      }
       const rows = mapFixtures(r.data);
+      rows.unknown.forEach((u) => unknownTeams.add(u));
       const p = await persist(rows);
       errors.push(...p.errors);
       fixturesUpserted += p.fixtures;
@@ -352,7 +369,12 @@ export async function runSync(
       const r = await provider.fetchLiveFixtures(ls);
       errors.push(...r.errors);
       await addRequests(r.requests);
+      if (r.rateLimit) {
+        providerRemaining = r.rateLimit.remaining ?? providerRemaining;
+        providerLimit = r.rateLimit.limit ?? providerLimit;
+      }
       const rows = mapFixtures(r.data);
+      rows.unknown.forEach((u) => unknownTeams.add(u));
       const p = await persist(rows);
       errors.push(...p.errors);
       fixturesUpserted += p.fixtures;
@@ -384,6 +406,8 @@ export async function runSync(
       resultsUpserted,
       errors,
       note,
+      providerRemaining,
+      unknownTeams: [...unknownTeams],
     };
   }
 
@@ -398,7 +422,16 @@ export async function runSync(
       requests: s.requests,
       count,
       cap: DAILY_CAP,
+      providerRemaining,
+      providerLimit,
       errors: s.errors.slice(0, 5),
     });
+    // Equipos del feed que no supimos mapear (para revisarlos en el panel).
+    if (unknownTeams.size) {
+      await setMeta("unknown_teams", {
+        at: new Date().toISOString(),
+        names: [...unknownTeams],
+      });
+    }
   }
 }
