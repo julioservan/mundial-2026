@@ -11,4 +11,9 @@ export type {
   ProviderFixture,
   LeagueSeason,
   ProviderCall,
+  MatchDetail,
+  TeamLineup,
+  LineupPlayer,
+  MatchEvent,
+  TeamStat,
 } from "./types";
