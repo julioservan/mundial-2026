@@ -82,9 +82,10 @@ API-Football ──> /api/sync (cron, server) ──> Supabase ──> web (lee 
 
 3. **Base de datos**: ejecuta en el SQL Editor de Supabase, en orden:
    `supabase/schema.sql`, `supabase/winner-picks.sql`,
-   `supabase/api-football.sql`, `supabase/match-detail.sql` y
-   `supabase/knockout-scoring.sql` (este último para la puntuación enriquecida de
-   eliminatorias: ganador 1 pt + resultado exacto 3 pts).
+   `supabase/api-football.sql`, `supabase/match-detail.sql`,
+   `supabase/knockout-scoring.sql` (puntuación enriquecida de eliminatorias:
+   ganador 1 pt + resultado exacto 3 pts) y `supabase/predictions-backup.sql`
+   (copia de seguridad diaria de pronósticos).
 4. **Backfill inicial** (siembra los partidos para que la web no esté vacía):
 
    ```bash
@@ -119,6 +120,10 @@ API-Football ──> /api/sync (cron, server) ──> Supabase ──> web (lee 
   (red / 5xx / 429) con backoff antes de rendirse.
 - **Forzar acciones**: `/api/sync?mode=full&secret=…` recarga todo;
   añade `&refresh=1` para re-detectar la liga.
+- **Backup de pronósticos**: se guarda una instantánea diaria automática en
+  `mundial_pred_backups` (la dispara `/api/sync` una vez al día). Forzar copia:
+  `/api/backup?secret=…`. Restaurar un día: leer su `data` (JSON) y re-insertar
+  en `mundial_predictions`.
 
 ## Estructura
 

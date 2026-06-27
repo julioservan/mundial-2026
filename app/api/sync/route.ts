@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { MATCHES } from "@/lib/data/matches";
 import { runSync, type SyncMode } from "@/lib/sync";
+import { maybeBackup } from "@/lib/backup";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -31,6 +32,8 @@ export async function GET(req: Request) {
 
   try {
     const summary = await runSync(mode, kickoffs, refresh);
+    // Copia de seguridad diaria de los pronósticos (best-effort, gated a 1/día).
+    await maybeBackup();
     return NextResponse.json(summary, { status: summary.ok ? 200 : 207 });
   } catch (e) {
     return NextResponse.json(
