@@ -24,11 +24,13 @@ export async function GET(req: Request) {
     }
   }
 
-  const mode = (new URL(req.url).searchParams.get("mode") ?? "auto") as SyncMode;
+  const params = new URL(req.url).searchParams;
+  const mode = (params.get("mode") ?? "auto") as SyncMode;
+  const refresh = params.get("refresh") === "1";
   const kickoffs = MATCHES.map((m) => m.kickoff);
 
   try {
-    const summary = await runSync(mode, kickoffs);
+    const summary = await runSync(mode, kickoffs, refresh);
     return NextResponse.json(summary, { status: summary.ok ? 200 : 207 });
   } catch (e) {
     return NextResponse.json(
