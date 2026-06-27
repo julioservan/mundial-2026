@@ -81,17 +81,24 @@ async function addRequests(n: number): Promise<number> {
 
 // --- Liga/temporada (cacheada) --------------------------------------------
 
+// Clave v2: invalida cualquier caché anterior que pudiera haber resuelto la
+// liga equivocada (p. ej. el Mundial de clubes).
+const LEAGUE_CACHE_KEY = "league_season_v2";
+
 async function ensureLeagueSeason(
   errors: string[],
+  refresh = false,
 ): Promise<{ leagueId: number; season: number } | null> {
-  const cached = await getMeta<{ leagueId: number; season: number }>(
-    "league_season",
-  );
-  if (cached) return cached;
+  if (!refresh) {
+    const cached = await getMeta<{ leagueId: number; season: number }>(
+      LEAGUE_CACHE_KEY,
+    );
+    if (cached) return cached;
+  }
   const { data, requests, errors: e } = await provider.resolveLeagueSeason();
   errors.push(...e);
   await addRequests(requests);
-  if (data) await setMeta("league_season", data);
+  if (data) await setMeta(LEAGUE_CACHE_KEY, data);
   return data;
 }
 
@@ -262,6 +269,7 @@ async function persist(rows: {
 export async function runSync(
   mode: SyncMode,
   matchKickoffs: string[],
+  refresh = false,
 ): Promise<SyncSummary> {
   const errors: string[] = [];
   let requests = 0;
@@ -296,7 +304,7 @@ export async function runSync(
     }
   }
 
-  const ls = await ensureLeagueSeason(errors);
+  const ls = await ensureLeagueSeason(errors, refresh);
   requests = (await getDailyCount()) - dailyBefore;
 
   if (!ls) {

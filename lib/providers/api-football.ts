@@ -110,19 +110,36 @@ export const apiFootball: ResultsProvider = {
   name: "API-Football",
 
   async resolveLeagueSeason(): Promise<ProviderCall<LeagueSeason | null>> {
-    // Buscamos la Copa del Mundo sin hardcodear el id; filtramos por nombre,
-    // tipo "Cup" y disponibilidad de la temporada del torneo.
+    // Buscamos la Copa del Mundo (de SELECCIONES) sin hardcodear el id.
+    // Cuidado: existen varias "World Cup" — Mundial de clubes, femenino,
+    // clasificación, sub-XX, olímpico… Hay que descartarlas y quedarnos con el
+    // Mundial masculino de selecciones (en API-Football es la liga id 1).
     const { response, errors } = await get<ApiLeague>(
       "/leagues?search=World%20Cup",
     );
-    const match = response.find(
+
+    const EXCLUDE =
+      /club|women|female|girls|qualif|olympic|youth|u-?\d|amateur|beach|futsal/i;
+
+    const candidates = response.filter(
       (l) =>
         l.league.type === "Cup" &&
         /world cup/i.test(l.league.name) &&
-        !/women|qualif|u-?\d/i.test(l.league.name) &&
+        !EXCLUDE.test(l.league.name) &&
         l.seasons.some((s) => s.year === SEASON),
     );
-    const data = match ? { leagueId: match.league.id, season: SEASON } : null;
+
+    // Puntuación: nombre exacto "World Cup" mejor; a igualdad, menor id.
+    const best = candidates
+      .map((l) => ({
+        l,
+        score:
+          (/^world cup$/i.test(l.league.name.trim()) ? 100 : 0) -
+          l.league.id / 1000,
+      }))
+      .sort((a, b) => b.score - a.score)[0]?.l;
+
+    const data = best ? { leagueId: best.league.id, season: SEASON } : null;
     return { data, requests: 1, errors };
   },
 
