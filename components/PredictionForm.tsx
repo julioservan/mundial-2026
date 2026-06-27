@@ -69,6 +69,7 @@ export function PredictionForm({ matches }: Props) {
   const [now, setNow] = useState(() => Date.now());
   // null = sin elección manual aún (se usa la pestaña por defecto).
   const [activePhase, setActivePhase] = useState<string | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
   const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const enriched = useMemo<Match[]>(
@@ -225,8 +226,54 @@ export function PredictionForm({ matches }: Props) {
     return Date.parse(match.kickoff) > now;
   }
 
+  // Lleva la vista (y un resaltado) al siguiente partido sin pronosticar,
+  // saltando de jornada cuando se completa la actual. Solo en fase de grupos.
+  function advanceFrom(matchId: string) {
+    const canFill = (m: Match) =>
+      isPlayable(m) && Date.parse(m.kickoff) > now;
+    const pending = (m: Match) => m.id !== matchId && !picks[m.id];
+
+    const inPhase = enriched
+      .filter((m) => phaseOf(m).key === effectivePhase)
+      .filter(canFill);
+    const idx = inPhase.findIndex((m) => m.id === matchId);
+    let next =
+      inPhase.slice(idx + 1).find(pending) ?? inPhase.find(pending) ?? null;
+
+    if (!next) {
+      // Jornada completa -> primera siguiente fase con partidos por rellenar.
+      const pIdx = phases.findIndex((p) => p.key === effectivePhase);
+      for (let i = pIdx + 1; i < phases.length; i++) {
+        const cand = enriched.filter(
+          (m) => phaseOf(m).key === phases[i].key && canFill(m) && !picks[m.id],
+        );
+        if (cand.length) {
+          setActivePhase(phases[i].key);
+          next = cand[0];
+          break;
+        }
+      }
+    }
+    if (next) scrollHighlight(next.id);
+  }
+
+  function scrollHighlight(id: string) {
+    setHighlightId(id);
+    window.setTimeout(() => {
+      document
+        .getElementById(`pred-${id}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 90);
+    window.setTimeout(
+      () => setHighlightId((cur) => (cur === id ? null : cur)),
+      1400,
+    );
+  }
+
   function chooseWinner(matchId: string, pick: Pick) {
     if (!editable(matchId)) return;
+    const match = enriched.find((m) => m.id === matchId);
+    const wasSelected = picks[matchId]?.pick === pick;
     update(matchId, (e) => {
       // Re-pulsar el ganador elegido lo deselecciona (borra la entrada).
       if (e?.pick === pick) return null;
@@ -234,6 +281,8 @@ export function PredictionForm({ matches }: Props) {
       const advance = pick === "draw" ? base.advance : null;
       return { ...base, pick, advance };
     });
+    // Auto-avance solo en grupos (en KO aún hay que meter el resultado).
+    if (!wasSelected && match && !isKnockout(match)) advanceFrom(matchId);
   }
 
   function setScore(matchId: string, side: "home" | "away", value: string) {
@@ -380,8 +429,13 @@ export function PredictionForm({ matches }: Props) {
           return (
             <li
               key={match.id}
-              className={`bg-surface border rounded-2xl p-4 sm:p-5 transition-colors ${
-                pick && !finished ? "border-accent/60" : "border-border"
+              id={`pred-${match.id}`}
+              className={`bg-surface border rounded-2xl p-4 sm:p-5 transition-all scroll-mt-40 ${
+                highlightId === match.id
+                  ? "border-accent ring-2 ring-accent/40"
+                  : pick && !finished
+                    ? "border-accent/60"
+                    : "border-border"
               }`}
             >
               <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground mb-3 flex justify-between gap-2 font-semibold">
