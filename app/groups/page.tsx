@@ -1,4 +1,6 @@
 import { GroupsStandings } from "@/components/GroupsStandings";
+import { ThirdPlaceTable } from "@/components/ThirdPlaceTable";
+import { DataFreshness } from "@/components/DataFreshness";
 
 export const metadata = {
   title: "Grupos · Mundialistas2026",
@@ -18,9 +20,19 @@ export default function GroupsPage() {
           Clasificación en directo según los resultados. Los 2 primeros (y los 8
           mejores terceros) avanzan a dieciseisavos.
         </p>
+        <div className="mt-5">
+          <DataFreshness />
+        </div>
       </header>
 
       <GroupsStandings />
+
+      <section className="mt-12">
+        <h2 className="text-2xl font-bold tracking-tight mb-5">
+          La pelea por los <span className="font-display text-accent">terceros</span>
+        </h2>
+        <ThirdPlaceTable />
+      </section>
     </div>
   );
 }

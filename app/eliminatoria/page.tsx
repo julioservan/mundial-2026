@@ -1,5 +1,5 @@
-import { KnockoutBracket } from "@/components/KnockoutBracket";
-import { KNOCKOUT_MATCHES } from "@/lib/data/matches";
+import { KnockoutBracketLive } from "@/components/KnockoutBracketLive";
+import { DataFreshness } from "@/components/DataFreshness";
 
 export const metadata = {
   title: "Eliminatoria · Mundialistas2026",
@@ -51,15 +51,18 @@ export default function EliminatoriaPage() {
       </section>
 
       <section>
-        <div className="flex items-end justify-between mb-6">
+        <div className="flex items-end justify-between mb-6 gap-3 flex-wrap">
           <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
             El <span className="font-display">cuadro</span>
           </h2>
-          <p className="text-xs text-muted-foreground hidden sm:block">
-            Desliza horizontalmente →
-          </p>
+          <div className="flex items-center gap-3">
+            <DataFreshness />
+            <p className="text-xs text-muted-foreground hidden sm:block">
+              Desliza horizontalmente →
+            </p>
+          </div>
         </div>
-        <KnockoutBracket matches={KNOCKOUT_MATCHES} />
+        <KnockoutBracketLive />
       </section>
 
       <section className="mt-16 bg-surface border border-border rounded-2xl p-8 sm:p-10">

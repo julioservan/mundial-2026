@@ -389,6 +389,7 @@ export async function runSync(
       note: s.note,
       requests: s.requests,
       count,
+      cap: DAILY_CAP,
       errors: s.errors.slice(0, 5),
     });
   }
