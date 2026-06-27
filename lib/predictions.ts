@@ -1,34 +1,68 @@
 import { getSupabase } from "@/lib/supabase/client";
 import { type Pick, winnerOf } from "@/lib/scoring";
 
-// Pronóstico de ganador por partido: matchId -> "home" | "draw" | "away".
-export type PickMap = Record<string, Pick>;
+// Una predicción por partido:
+//   · pick    -> ganador (1/X/2). En grupos es lo único que cuenta.
+//   · home/away -> marcador exacto (solo eliminatorias; "" si no se rellena).
+//   · advance -> "quién pasa" (penaltis), obligatorio en KO si pick === "draw".
+export interface PredEntry {
+  pick: Pick;
+  home: string;
+  away: string;
+  advance: "home" | "away" | null;
+}
+
+export type PredMap = Record<string, PredEntry>;
 
 const STORAGE_KEY = "wc2026:picks";
-const LEGACY_SCORE_KEY = "wc2026:predictions"; // formato antiguo (marcadores)
+const LEGACY_PICK_KEY = "wc2026:picks"; // mismo key, formato antiguo (string)
+const LEGACY_SCORE_KEY = "wc2026:predictions"; // aún más antiguo (marcadores)
+
+function entry(partial: Partial<PredEntry> & { pick: Pick }): PredEntry {
+  return {
+    pick: partial.pick,
+    home: partial.home ?? "",
+    away: partial.away ?? "",
+    advance: partial.advance ?? null,
+  };
+}
+
+export function isEmptyEntry(e: PredEntry | undefined): boolean {
+  return !e || (!e.pick && e.home === "" && e.away === "" && !e.advance);
+}
 
 // ----------------------------------------------------------------------------
 // localStorage (para usuarios sin sesión, y origen de la migración)
 // ----------------------------------------------------------------------------
-export function loadLocal(): PickMap {
+export function loadLocal(): PredMap {
   if (typeof window === "undefined") return {};
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-    // Migración del formato antiguo (marcadores) -> ganador.
-    const legacy = window.localStorage.getItem(LEGACY_SCORE_KEY);
-    if (legacy) {
-      const scores = JSON.parse(legacy) as Record<
-        string,
-        { home: string; away: string }
-      >;
-      const picks: PickMap = {};
-      for (const [id, s] of Object.entries(scores)) {
-        if (s.home !== "" && s.away !== "") {
-          picks[id] = winnerOf(Number(s.home), Number(s.away));
+    if (raw) {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const out: PredMap = {};
+      for (const [id, v] of Object.entries(parsed)) {
+        if (typeof v === "string") {
+          // Formato antiguo: matchId -> "home"|"draw"|"away".
+          out[id] = entry({ pick: v as Pick });
+        } else if (v && typeof v === "object") {
+          const o = v as Partial<PredEntry>;
+          if (o.pick) out[id] = entry({ pick: o.pick, home: o.home, away: o.away, advance: o.advance ?? null });
         }
       }
-      return picks;
+      return out;
+    }
+    // Formato más antiguo (marcadores) -> ganador derivado.
+    const legacy = window.localStorage.getItem(LEGACY_SCORE_KEY);
+    if (legacy) {
+      const scores = JSON.parse(legacy) as Record<string, { home: string; away: string }>;
+      const out: PredMap = {};
+      for (const [id, s] of Object.entries(scores)) {
+        if (s.home !== "" && s.away !== "") {
+          out[id] = entry({ pick: winnerOf(Number(s.home), Number(s.away)) });
+        }
+      }
+      return out;
     }
     return {};
   } catch {
@@ -36,58 +70,66 @@ export function loadLocal(): PickMap {
   }
 }
 
-export function saveLocal(state: PickMap) {
+export function saveLocal(state: PredMap) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
 export function clearLocal() {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(STORAGE_KEY);
+  window.localStorage.removeItem(LEGACY_PICK_KEY);
   window.localStorage.removeItem(LEGACY_SCORE_KEY);
 }
 
-export function hasAnyPick(map: PickMap): boolean {
+export function hasAnyPick(map: PredMap): boolean {
   return Object.keys(map).length > 0;
 }
 
 // ----------------------------------------------------------------------------
 // Supabase (para usuarios con sesión)
 // ----------------------------------------------------------------------------
-export async function fetchRemote(userId: string): Promise<PickMap> {
+export async function fetchRemote(userId: string): Promise<PredMap> {
   const { data, error } = await getSupabase()
     .from("mundial_predictions")
-    .select("match_id, pick, home_score, away_score")
+    .select("match_id, pick, home_score, away_score, advance")
     .eq("user_id", userId);
   if (error) throw error;
 
-  const map: PickMap = {};
+  const map: PredMap = {};
   for (const row of data ?? []) {
-    if (row.pick) {
-      map[row.match_id as string] = row.pick as Pick;
-    } else if (row.home_score != null && row.away_score != null) {
-      // Predicciones antiguas (marcador) -> se interpretan como ganador.
-      map[row.match_id as string] = winnerOf(
-        row.home_score as number,
-        row.away_score as number,
-      );
-    }
+    const id = row.match_id as string;
+    const pick =
+      (row.pick as Pick | null) ??
+      (row.home_score != null && row.away_score != null
+        ? winnerOf(row.home_score as number, row.away_score as number)
+        : null);
+    if (!pick) continue;
+    map[id] = entry({
+      pick,
+      home: row.home_score != null ? String(row.home_score) : "",
+      away: row.away_score != null ? String(row.away_score) : "",
+      advance: (row.advance as "home" | "away" | null) ?? null,
+    });
   }
   return map;
 }
 
-export async function upsertRemote(userId: string, matchId: string, pick: Pick) {
-  const { error } = await getSupabase().from("mundial_predictions").upsert(
-    {
-      user_id: userId,
-      match_id: matchId,
-      pick,
-      home_score: null,
-      away_score: null,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "user_id,match_id" },
-  );
+function toRow(userId: string, matchId: string, e: PredEntry) {
+  return {
+    user_id: userId,
+    match_id: matchId,
+    pick: e.pick,
+    home_score: e.home === "" ? null : Number(e.home),
+    away_score: e.away === "" ? null : Number(e.away),
+    advance: e.advance,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export async function upsertRemote(userId: string, matchId: string, e: PredEntry) {
+  const { error } = await getSupabase()
+    .from("mundial_predictions")
+    .upsert(toRow(userId, matchId, e), { onConflict: "user_id,match_id" });
   if (error) throw error;
 }
 
@@ -109,14 +151,8 @@ export async function deleteAllRemote(userId: string) {
 }
 
 // Sube a la base los pronósticos que el usuario tuviera en local (sin cuenta).
-export async function migrateLocalToRemote(userId: string, local: PickMap) {
-  const rows = Object.entries(local).map(([matchId, pick]) => ({
-    user_id: userId,
-    match_id: matchId,
-    pick,
-    home_score: null,
-    away_score: null,
-  }));
+export async function migrateLocalToRemote(userId: string, local: PredMap) {
+  const rows = Object.entries(local).map(([matchId, e]) => toRow(userId, matchId, e));
   if (rows.length === 0) return;
   const { error } = await getSupabase()
     .from("mundial_predictions")
