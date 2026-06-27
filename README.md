@@ -81,9 +81,10 @@ API-Football ──> /api/sync (cron, server) ──> Supabase ──> web (lee 
    | `APIFOOTBALL_DAILY_CAP` (opc.) | Tope diario de peticiones (def. 95) |
 
 3. **Base de datos**: ejecuta en el SQL Editor de Supabase, en orden:
-   `supabase/schema.sql`, `supabase/api-football.sql` y
-   `supabase/match-detail.sql` (este último para la ficha de partido con
-   alineaciones/eventos/estadísticas).
+   `supabase/schema.sql`, `supabase/winner-picks.sql`,
+   `supabase/api-football.sql`, `supabase/match-detail.sql` y
+   `supabase/knockout-scoring.sql` (este último para la puntuación enriquecida de
+   eliminatorias: ganador 1 pt + resultado exacto 3 pts).
 4. **Backfill inicial** (siembra los partidos para que la web no esté vacía):
 
    ```bash

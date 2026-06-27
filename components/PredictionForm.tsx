@@ -7,12 +7,19 @@ import { getTeam } from "@/lib/data/teams";
 import { stageLabel } from "@/lib/utils/format";
 import { LocalTime } from "@/components/LocalTime";
 import { useAuth } from "@/lib/supabase/auth";
-import { scorePick, winnerOf, type Outcome, type Pick } from "@/lib/scoring";
+import {
+  scorePick,
+  scoreKnockout,
+  winnerOf,
+  type Outcome,
+  type Pick,
+} from "@/lib/scoring";
 import { type ResultMap, fetchResults } from "@/lib/results";
 import { fetchFixtureAssignments } from "@/lib/fixtures";
 import type { SlotAssignment } from "@/lib/bracket";
 import {
-  type PickMap,
+  type PredEntry,
+  type PredMap,
   clearLocal,
   deleteAllRemote,
   deleteRemote,
@@ -36,7 +43,6 @@ interface Phase {
   order: number;
 }
 
-// Fase (pestaña) a la que pertenece un partido: jornada de grupos o ronda KO.
 function phaseOf(m: Match): Phase {
   if (m.stage === "group") {
     const md = m.matchday ?? 1;
@@ -50,27 +56,20 @@ function phaseOf(m: Match): Phase {
     third_place: 14,
     final: 15,
   };
-  return {
-    key: m.stage,
-    label: stageLabel(m.stage),
-    order: KO_ORDER[m.stage] ?? 99,
-  };
+  return { key: m.stage, label: stageLabel(m.stage), order: KO_ORDER[m.stage] ?? 99 };
 }
 
 export function PredictionForm({ matches }: Props) {
   const { loading: authLoading, user } = useAuth();
-  const [picks, setPicks] = useState<PickMap>({});
+  const [picks, setPicks] = useState<PredMap>({});
   const [results, setResults] = useState<ResultMap>({});
-  const [assignments, setAssignments] = useState<
-    Record<string, SlotAssignment>
-  >({});
+  const [assignments, setAssignments] = useState<Record<string, SlotAssignment>>({});
   const [hydrated, setHydrated] = useState(false);
   const [status, setStatus] = useState<SyncStatus>("idle");
   const [now, setNow] = useState(() => Date.now());
   const [activePhase, setActivePhase] = useState("g1");
   const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  // Rellena los equipos de eliminatoria con los cruces reales del feed.
   const enriched = useMemo<Match[]>(
     () =>
       matches.map((m) => {
@@ -86,12 +85,9 @@ export function PredictionForm({ matches }: Props) {
     [matches, assignments],
   );
 
-  // Un partido es pronosticable cuando ya se conocen ambos equipos.
   const isPlayable = (m: Match) => Boolean(m.homeTeamId && m.awayTeamId);
   const isKnockout = (m: Match) => m.stage !== "group";
 
-  // Fases a mostrar: las jornadas de grupo siempre; las rondas KO solo cuando
-  // al menos un cruce tiene ya equipos definidos.
   const phases = useMemo<Phase[]>(() => {
     const map = new Map<string, Phase>();
     for (const m of enriched) {
@@ -104,7 +100,6 @@ export function PredictionForm({ matches }: Props) {
     return [...map.values()].sort((a, b) => a.order - b.order);
   }, [enriched]);
 
-  // Reloj: refresca cada 30 s para bloquear los partidos al empezar sin recargar.
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(t);
@@ -113,8 +108,8 @@ export function PredictionForm({ matches }: Props) {
   const validIds = useMemo(() => new Set(matches.map((m) => m.id)), [matches]);
 
   const onlyValid = useCallback(
-    (map: PickMap): PickMap => {
-      const out: PickMap = {};
+    (map: PredMap): PredMap => {
+      const out: PredMap = {};
       for (const [id, p] of Object.entries(map)) {
         if (validIds.has(id)) out[id] = p;
       }
@@ -123,7 +118,6 @@ export function PredictionForm({ matches }: Props) {
     [validIds],
   );
 
-  // Cruces de eliminatoria desde el feed (para rellenar equipos).
   useEffect(() => {
     let active = true;
     fetchFixtureAssignments()
@@ -134,7 +128,6 @@ export function PredictionForm({ matches }: Props) {
     };
   }, []);
 
-  // Carga inicial de pronósticos (Supabase con sesión, localStorage sin ella).
   useEffect(() => {
     let active = true;
     async function load() {
@@ -175,14 +168,14 @@ export function PredictionForm({ matches }: Props) {
     };
   }, [user, authLoading, validIds, onlyValid]);
 
-  const scheduleRemoteSync = useCallback(
-    (matchId: string, pick: Pick | null) => {
-      if (!user) return;
+  const scheduleSync = useCallback(
+    (matchId: string, e: PredEntry | null) => {
       clearTimeout(timersRef.current[matchId]);
+      if (!user) return;
       setStatus("saving");
       timersRef.current[matchId] = setTimeout(async () => {
         try {
-          if (pick) await upsertRemote(user.id, matchId, pick);
+          if (e) await upsertRemote(user.id, matchId, e);
           else await deleteRemote(user.id, matchId);
           setStatus("saved");
         } catch {
@@ -193,19 +186,51 @@ export function PredictionForm({ matches }: Props) {
     [user],
   );
 
-  function choose(matchId: string, pick: Pick) {
+  // Aplica un cambio a la entrada de un partido y lo persiste.
+  const update = useCallback(
+    (matchId: string, mutate: (e: PredEntry | undefined) => PredEntry | null) => {
+      setPicks((prev) => {
+        const nextEntry = mutate(prev[matchId]);
+        const next = { ...prev };
+        if (nextEntry) next[matchId] = nextEntry;
+        else delete next[matchId];
+        if (user) scheduleSync(matchId, nextEntry);
+        else saveLocal(next);
+        return next;
+      });
+    },
+    [user, scheduleSync],
+  );
+
+  function editable(matchId: string): boolean {
     const match = enriched.find((m) => m.id === matchId);
-    if (!match || !isPlayable(match)) return;
-    if (Date.parse(match.kickoff) <= now) return;
+    if (!match || !isPlayable(match)) return false;
+    return Date.parse(match.kickoff) > now;
+  }
 
-    const nextPick = picks[matchId] === pick ? null : pick;
-    const next = { ...picks };
-    if (nextPick) next[matchId] = nextPick;
-    else delete next[matchId];
-    setPicks(next);
+  function chooseWinner(matchId: string, pick: Pick) {
+    if (!editable(matchId)) return;
+    update(matchId, (e) => {
+      // Re-pulsar el ganador elegido lo deselecciona (borra la entrada).
+      if (e?.pick === pick) return null;
+      const base = e ?? { pick, home: "", away: "", advance: null };
+      const advance = pick === "draw" ? base.advance : null;
+      return { ...base, pick, advance };
+    });
+  }
 
-    if (user) scheduleRemoteSync(matchId, nextPick);
-    else saveLocal(next);
+  function setScore(matchId: string, side: "home" | "away", value: string) {
+    if (!editable(matchId)) return;
+    const v = value.replace(/[^0-9]/g, "").slice(0, 2);
+    update(matchId, (e) => {
+      if (!e) return null; // hay que elegir ganador primero
+      return { ...e, [side]: v };
+    });
+  }
+
+  function setAdvance(matchId: string, who: "home" | "away") {
+    if (!editable(matchId)) return;
+    update(matchId, (e) => (e ? { ...e, advance: who } : null));
   }
 
   async function handleReset() {
@@ -224,14 +249,12 @@ export function PredictionForm({ matches }: Props) {
     }
   }
 
-  // Totales sobre lo pronosticable (los cruces KO aún sin equipos no cuentan).
   const playable = enriched.filter(isPlayable);
   const completed = playable.filter((m) => picks[m.id]).length;
   const progress = playable.length > 0 ? (completed / playable.length) * 100 : 0;
   const visibleMatches = enriched.filter((m) => phaseOf(m).key === activePhase);
   const phasePicked = (key: string) =>
-    enriched.filter((m) => phaseOf(m).key === key && isPlayable(m) && picks[m.id])
-      .length;
+    enriched.filter((m) => phaseOf(m).key === key && isPlayable(m) && picks[m.id]).length;
   const phaseTotal = (key: string) =>
     enriched.filter((m) => phaseOf(m).key === key && isPlayable(m)).length;
 
@@ -266,9 +289,7 @@ export function PredictionForm({ matches }: Props) {
               <span className="font-display text-4xl text-accent leading-none">
                 {completed}
               </span>
-              <span className="text-muted-foreground text-sm">
-                / {playable.length}
-              </span>
+              <span className="text-muted-foreground text-sm">/ {playable.length}</span>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -288,12 +309,12 @@ export function PredictionForm({ matches }: Props) {
           />
         </div>
         <p className="text-[11px] text-muted-foreground mt-3">
-          Elige <span className="text-foreground">quién gana</span> cada partido.
-          1 punto por acierto. En eliminatorias eliges quién pasa.
+          Grupos: acierta <span className="text-foreground">quién gana</span> (1 pt).
+          Eliminatorias: <span className="text-foreground">ganador</span> (1 pt) +{" "}
+          <span className="text-foreground">resultado exacto</span> (3 pts).
         </p>
       </div>
 
-      {/* Pestañas por fase (jornadas de grupo + rondas de eliminatoria) */}
       <div className="flex gap-2 mb-5 overflow-x-auto">
         {phases.map((p) => (
           <button
@@ -307,9 +328,7 @@ export function PredictionForm({ matches }: Props) {
           >
             {p.label}
             <span
-              className={`ml-1.5 text-xs ${
-                activePhase === p.key ? "opacity-80" : "opacity-60"
-              }`}
+              className={`ml-1.5 text-xs ${activePhase === p.key ? "opacity-80" : "opacity-60"}`}
             >
               {phasePicked(p.key)}/{phaseTotal(p.key)}
             </span>
@@ -321,19 +340,25 @@ export function PredictionForm({ matches }: Props) {
         {visibleMatches.map((match) => {
           const home = getTeam(match.homeTeamId);
           const away = getTeam(match.awayTeamId);
-          const pick = picks[match.id] ?? null;
+          const e = picks[match.id];
+          const pick = e?.pick ?? null;
           const result = results[match.id];
-          const finished = Boolean(
-            result && result.home !== "" && result.away !== "",
-          );
+          const finished = Boolean(result && result.home !== "" && result.away !== "");
           const actual = finished
             ? winnerOf(Number(result!.home), Number(result!.away))
             : null;
-          const scored = finished && pick ? scorePick(pick, result!) : null;
+          const knockout = isKnockout(match);
+          const scored = finished
+            ? knockout
+              ? scoreKnockout(pick, e?.home ?? "", e?.away ?? "", result!)
+              : pick
+                ? scorePick(pick, result!)
+                : null
+            : null;
           const playableMatch = isPlayable(match);
           const started = Date.parse(match.kickoff) <= now;
           const locked = started || finished || !playableMatch;
-          const knockout = isKnockout(match);
+          const needsAdvance = knockout && pick === "draw" && !e?.advance;
 
           return (
             <li
@@ -349,9 +374,7 @@ export function PredictionForm({ matches }: Props) {
                     : `Grupo ${match.group} · J${match.matchday}`}
                 </span>
                 <span className="flex items-center gap-2">
-                  {!playableMatch && (
-                    <span className="text-muted-foreground">Por definir</span>
-                  )}
+                  {!playableMatch && <span className="text-muted-foreground">Por definir</span>}
                   {playableMatch && locked && !finished && (
                     <span className="text-muted-foreground">🔒 Cerrado</span>
                   )}
@@ -361,39 +384,93 @@ export function PredictionForm({ matches }: Props) {
                 </span>
               </div>
 
-              <div className={`grid gap-2 ${knockout ? "grid-cols-2" : "grid-cols-3"}`}>
+              {/* Ganador (1 / X / 2) */}
+              <div className="grid grid-cols-3 gap-2">
                 <PickButton
                   selected={pick === "home"}
                   correct={actual === "home"}
                   finished={finished}
                   locked={locked}
-                  onClick={() => choose(match.id, "home")}
+                  onClick={() => chooseWinner(match.id, "home")}
                   flag={home?.flag}
                   label={home?.name ?? "Por definir"}
-                  sub={knockout ? "Pasa" : "Gana"}
+                  sub="Gana"
                 />
-                {!knockout && (
-                  <PickButton
-                    selected={pick === "draw"}
-                    correct={actual === "draw"}
-                    finished={finished}
-                    locked={locked}
-                    onClick={() => choose(match.id, "draw")}
-                    label="Empate"
-                    sub="X"
-                  />
-                )}
+                <PickButton
+                  selected={pick === "draw"}
+                  correct={actual === "draw"}
+                  finished={finished}
+                  locked={locked}
+                  onClick={() => chooseWinner(match.id, "draw")}
+                  label="Empate"
+                  sub="X"
+                />
                 <PickButton
                   selected={pick === "away"}
                   correct={actual === "away"}
                   finished={finished}
                   locked={locked}
-                  onClick={() => choose(match.id, "away")}
+                  onClick={() => chooseWinner(match.id, "away")}
                   flag={away?.flag}
                   label={away?.name ?? "Por definir"}
-                  sub={knockout ? "Pasa" : "Gana"}
+                  sub="Gana"
                 />
               </div>
+
+              {/* Eliminatorias: marcador exacto + quién pasa si empate */}
+              {knockout && playableMatch && (
+                <div className="mt-3 space-y-3">
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="text-lg" aria-hidden>
+                      {home?.flag}
+                    </span>
+                    <ScoreInput
+                      value={e?.home ?? ""}
+                      disabled={locked || !pick}
+                      onChange={(v) => setScore(match.id, "home", v)}
+                      aria-label={`Goles de ${home?.name}`}
+                    />
+                    <span className="text-muted-foreground text-xs font-mono">resultado</span>
+                    <ScoreInput
+                      value={e?.away ?? ""}
+                      disabled={locked || !pick}
+                      onChange={(v) => setScore(match.id, "away", v)}
+                      aria-label={`Goles de ${away?.name}`}
+                    />
+                    <span className="text-lg" aria-hidden>
+                      {away?.flag}
+                    </span>
+                  </div>
+
+                  {pick === "draw" && (
+                    <div
+                      className={`rounded-xl border p-2.5 ${
+                        needsAdvance ? "border-amber-500/50 bg-amber-500/5" : "border-border"
+                      }`}
+                    >
+                      <p className="text-[11px] text-center text-muted-foreground mb-2">
+                        Empate: ¿quién pasa? {needsAdvance && <span className="text-amber-500">(elige)</span>}
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <AdvanceButton
+                          selected={e?.advance === "home"}
+                          disabled={locked}
+                          onClick={() => setAdvance(match.id, "home")}
+                          flag={home?.flag}
+                          label={home?.name ?? "Local"}
+                        />
+                        <AdvanceButton
+                          selected={e?.advance === "away"}
+                          disabled={locked}
+                          onClick={() => setAdvance(match.id, "away")}
+                          flag={away?.flag}
+                          label={away?.name ?? "Visitante"}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {finished && (
                 <div className="mt-3 pt-3 border-t border-border/60 flex items-center justify-between gap-3 text-xs">
@@ -415,6 +492,62 @@ export function PredictionForm({ matches }: Props) {
         })}
       </ul>
     </div>
+  );
+}
+
+function ScoreInput({
+  value,
+  disabled,
+  onChange,
+  ...rest
+}: {
+  value: string;
+  disabled: boolean;
+  onChange: (v: string) => void;
+  "aria-label"?: string;
+}) {
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      pattern="[0-9]*"
+      value={value}
+      disabled={disabled}
+      onChange={(ev) => onChange(ev.target.value)}
+      placeholder="—"
+      className="w-11 h-11 text-center font-display text-xl bg-background border border-border rounded-xl focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+      {...rest}
+    />
+  );
+}
+
+function AdvanceButton({
+  selected,
+  disabled,
+  onClick,
+  flag,
+  label,
+}: {
+  selected: boolean;
+  disabled: boolean;
+  onClick: () => void;
+  flag?: string;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex items-center justify-center gap-2 rounded-lg border px-2 py-2 text-xs font-semibold transition-all disabled:cursor-not-allowed ${
+        selected
+          ? "border-accent bg-accent text-accent-foreground"
+          : "border-border hover:bg-surface-muted disabled:opacity-50"
+      }`}
+    >
+      {flag && <span aria-hidden>{flag}</span>}
+      <span className="truncate">{label}</span>
+    </button>
   );
 }
 

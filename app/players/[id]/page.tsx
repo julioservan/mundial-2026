@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getSupabase } from "@/lib/supabase/client";
-import { fetchRemote, type PickMap } from "@/lib/predictions";
+import { fetchRemote, type PredMap } from "@/lib/predictions";
 import { fetchResults, type ResultMap } from "@/lib/results";
 import { GROUP_MATCHES } from "@/lib/data/matches";
 import { getTeam } from "@/lib/data/teams";
@@ -22,7 +22,7 @@ export default function PlayerPredictionsPage() {
   const id = String(params.id);
 
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
-  const [picks, setPicks] = useState<PickMap>({});
+  const [picks, setPicks] = useState<PredMap>({});
   const [results, setResults] = useState<ResultMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -139,7 +139,7 @@ export default function PlayerPredictionsPage() {
         {visibleMatches.map((match) => {
           const home = getTeam(match.homeTeamId);
           const away = getTeam(match.awayTeamId);
-          const pick = picks[match.id] ?? null;
+          const pick = picks[match.id]?.pick ?? null;
           const result = results[match.id];
           const finished = Boolean(
             result && result.home !== "" && result.away !== "",
