@@ -11,7 +11,11 @@ function groupByDate(matches: Match[]) {
     list.push(match);
     grouped.set(date, list);
   }
-  return Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b));
+  // Más reciente primero: fechas descendentes y, dentro del día, hora descendente.
+  for (const list of grouped.values()) {
+    list.sort((a, b) => b.kickoff.localeCompare(a.kickoff));
+  }
+  return Array.from(grouped.entries()).sort(([a], [b]) => b.localeCompare(a));
 }
 
 type ScorersMap = Record<string, { home: string[]; away: string[] }>;
@@ -60,12 +64,12 @@ export function MatchesList({ matches, results = {}, scorers = {} }: Props) {
         <div className="space-y-6">
           {(
             [
-              "round32",
-              "round16",
-              "quarterfinal",
-              "semifinal",
-              "third_place",
               "final",
+              "third_place",
+              "semifinal",
+              "quarterfinal",
+              "round16",
+              "round32",
             ] as const
           ).map((stage) => {
             const stageMatches = knockouts.filter((m) => m.stage === stage);
