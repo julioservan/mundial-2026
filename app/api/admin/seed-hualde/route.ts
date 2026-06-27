@@ -87,13 +87,27 @@ export async function GET(req: Request) {
     }
   }
 
+  // Desglose partido a partido: pick vs marcador real guardado.
+  const breakdown = (preds ?? []).map((p) => {
+    const r = resMap.get(p.match_id as string);
+    const actual = r
+      ? actualOf(r.home_score as number, r.away_score as number)
+      : null;
+    return {
+      match: p.match_id,
+      pick: p.pick,
+      resultado: r ? `${r.home_score}-${r.away_score}` : null,
+      actual,
+      ok: actual ? p.pick === actual : null,
+    };
+  });
+
   return NextResponse.json({
     insertError: insErr?.message ?? null,
     totalPredicciones: preds?.length ?? 0,
     cruzanConResultado: crossing,
     aciertosCalculados: correctComputed,
     rankingView: lb ?? null,
-    muestraIdsResultados: (results ?? []).slice(0, 5).map((r) => r.match_id),
-    muestraIdsPredicciones: (preds ?? []).slice(0, 5).map((p) => p.match_id),
+    breakdown,
   });
 }
