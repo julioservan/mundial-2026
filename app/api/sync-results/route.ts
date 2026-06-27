@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { fetchWorldCupGames, mapFinishedResults } from "@/lib/worldcup-api";
+import { MATCHES } from "@/lib/data/matches";
+import { runSync } from "@/lib/sync";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
-// Sincroniza los resultados TERMINADOS desde worldcup26.ir hacia mundial_results.
-// Pensado para llamarse desde un cron (Vercel Cron o cron-job.org).
-// Si CRON_SECRET está definido, exige Authorization: Bearer <secret> o ?secret=.
+// DEPRECADO: usa /api/sync. Se mantiene como alias para no romper crons ya
+// configurados. Ahora delega en el motor de sincronización (API-Football) en
+// lugar de leer worldcup26.ir directamente.
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (secret) {
@@ -19,45 +20,13 @@ export async function GET(req: Request) {
     }
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !serviceKey) {
-    return NextResponse.json(
-      { error: "Faltan NEXT_PUBLIC_SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY" },
-      { status: 500 },
-    );
-  }
-
-  let results;
   try {
-    const games = await fetchWorldCupGames();
-    results = mapFinishedResults(games);
-  } catch (e) {
+    const summary = await runSync("full", MATCHES.map((m) => m.kickoff));
     return NextResponse.json(
-      { error: "No se pudo leer la API de resultados", detail: String(e) },
-      { status: 502 },
+      { ok: summary.ok, partidos_terminados: summary.resultsUpserted, summary },
+      { status: summary.ok ? 200 : 207 },
     );
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 });
   }
-
-  const supabase = createClient(supabaseUrl, serviceKey, {
-    auth: { persistSession: false },
-  });
-
-  const rows = results.map((r) => ({
-    match_id: r.matchId,
-    home_score: r.home,
-    away_score: r.away,
-    updated_at: new Date().toISOString(),
-  }));
-
-  if (rows.length > 0) {
-    const { error } = await supabase
-      .from("mundial_results")
-      .upsert(rows, { onConflict: "match_id" });
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-  }
-
-  return NextResponse.json({ ok: true, partidos_terminados: rows.length });
 }
