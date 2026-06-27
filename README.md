@@ -106,6 +106,17 @@ API-Football ──> /api/sync (cron, server) ──> Supabase ──> web (lee 
 > el cron de minutos directamente en Vercel necesitas el plan **Pro** (entonces
 > cambia el `schedule` de `vercel.json` a `* * * * *`).
 
+### Monitorización y fiabilidad
+
+- **Panel admin** en `/admin/sync`: estado del robot (verde/ámbar/rojo), última
+  sincronización, cuota usada (la nuestra y la que reporta el proveedor), liga
+  detectada, equipos sin reconocer y últimos errores.
+- **Endpoint `/api/health`**: el mismo estado en JSON, para vigilar o alertar.
+- **Reintentos automáticos**: el adaptador reintenta ante errores temporales
+  (red / 5xx / 429) con backoff antes de rendirse.
+- **Forzar acciones**: `/api/sync?mode=full&secret=…` recarga todo;
+  añade `&refresh=1` para re-detectar la liga.
+
 ## Estructura
 
 ```
