@@ -4,10 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { Match } from "@/types";
 import { getTeam } from "@/lib/data/teams";
+import { stageLabel } from "@/lib/utils/format";
 import { LocalTime } from "@/components/LocalTime";
 import { useAuth } from "@/lib/supabase/auth";
 import { scorePick, winnerOf, type Outcome, type Pick } from "@/lib/scoring";
 import { type ResultMap, fetchResults } from "@/lib/results";
+import { fetchFixtureAssignments } from "@/lib/fixtures";
+import type { SlotAssignment } from "@/lib/bracket";
 import {
   type PickMap,
   clearLocal,
@@ -27,24 +30,79 @@ interface Props {
   matches: Match[];
 }
 
+interface Phase {
+  key: string;
+  label: string;
+  order: number;
+}
+
+// Fase (pestaña) a la que pertenece un partido: jornada de grupos o ronda KO.
+function phaseOf(m: Match): Phase {
+  if (m.stage === "group") {
+    const md = m.matchday ?? 1;
+    return { key: `g${md}`, label: `Jornada ${md}`, order: md };
+  }
+  const KO_ORDER: Record<string, number> = {
+    round32: 10,
+    round16: 11,
+    quarterfinal: 12,
+    semifinal: 13,
+    third_place: 14,
+    final: 15,
+  };
+  return {
+    key: m.stage,
+    label: stageLabel(m.stage),
+    order: KO_ORDER[m.stage] ?? 99,
+  };
+}
+
 export function PredictionForm({ matches }: Props) {
   const { loading: authLoading, user } = useAuth();
   const [picks, setPicks] = useState<PickMap>({});
   const [results, setResults] = useState<ResultMap>({});
+  const [assignments, setAssignments] = useState<
+    Record<string, SlotAssignment>
+  >({});
   const [hydrated, setHydrated] = useState(false);
   const [status, setStatus] = useState<SyncStatus>("idle");
   const [now, setNow] = useState(() => Date.now());
-  const [activeMd, setActiveMd] = useState(1);
+  const [activePhase, setActivePhase] = useState("g1");
   const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  // Jornadas presentes (1, 2, 3…).
-  const matchdays = useMemo(
+  // Rellena los equipos de eliminatoria con los cruces reales del feed.
+  const enriched = useMemo<Match[]>(
     () =>
-      Array.from(new Set(matches.map((m) => m.matchday ?? 1))).sort(
-        (a, b) => a - b,
-      ),
-    [matches],
+      matches.map((m) => {
+        if (m.stage === "group") return m;
+        const a = assignments[m.id];
+        if (!a) return m;
+        return {
+          ...m,
+          homeTeamId: a.homeTeamId ?? m.homeTeamId,
+          awayTeamId: a.awayTeamId ?? m.awayTeamId,
+        };
+      }),
+    [matches, assignments],
   );
+
+  // Un partido es pronosticable cuando ya se conocen ambos equipos.
+  const isPlayable = (m: Match) => Boolean(m.homeTeamId && m.awayTeamId);
+  const isKnockout = (m: Match) => m.stage !== "group";
+
+  // Fases a mostrar: las jornadas de grupo siempre; las rondas KO solo cuando
+  // al menos un cruce tiene ya equipos definidos.
+  const phases = useMemo<Phase[]>(() => {
+    const map = new Map<string, Phase>();
+    for (const m of enriched) {
+      if (isKnockout(m) && !enriched.some((x) => x.stage === m.stage && isPlayable(x))) {
+        continue;
+      }
+      const p = phaseOf(m);
+      map.set(p.key, p);
+    }
+    return [...map.values()].sort((a, b) => a.order - b.order);
+  }, [enriched]);
 
   // Reloj: refresca cada 30 s para bloquear los partidos al empezar sin recargar.
   useEffect(() => {
@@ -52,10 +110,8 @@ export function PredictionForm({ matches }: Props) {
     return () => clearInterval(t);
   }, []);
 
-  // Conjunto de IDs de partido válidos en el calendario actual.
   const validIds = useMemo(() => new Set(matches.map((m) => m.id)), [matches]);
 
-  // Deja solo los pronósticos de partidos que existen ahora.
   const onlyValid = useCallback(
     (map: PickMap): PickMap => {
       const out: PickMap = {};
@@ -67,10 +123,18 @@ export function PredictionForm({ matches }: Props) {
     [validIds],
   );
 
-  // Carga inicial: desde Supabase si hay sesión (migrando lo local la primera
-  // vez), o desde localStorage si se juega sin cuenta. Los resultados son
-  // públicos y se cargan siempre. Se ignoran (y limpian) los pronósticos
-  // huérfanos de partidos que ya no existen en el calendario.
+  // Cruces de eliminatoria desde el feed (para rellenar equipos).
+  useEffect(() => {
+    let active = true;
+    fetchFixtureAssignments()
+      .then((a) => active && setAssignments(a))
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Carga inicial de pronósticos (Supabase con sesión, localStorage sin ella).
   useEffect(() => {
     let active = true;
     async function load() {
@@ -84,12 +148,10 @@ export function PredictionForm({ matches }: Props) {
       if (user) {
         try {
           const remote = await fetchRemote(user.id);
-          // Borra en segundo plano los pronósticos de partidos inexistentes.
           const orphans = Object.keys(remote).filter((id) => !validIds.has(id));
           for (const id of orphans) {
             void deleteRemote(user.id, id).catch(() => {});
           }
-
           const remoteValid = onlyValid(remote);
           const local = onlyValid(loadLocal());
           if (Object.keys(remoteValid).length === 0 && hasAnyPick(local)) {
@@ -132,11 +194,10 @@ export function PredictionForm({ matches }: Props) {
   );
 
   function choose(matchId: string, pick: Pick) {
-    // No se puede editar un partido ya empezado.
-    const match = matches.find((m) => m.id === matchId);
-    if (match && Date.parse(match.kickoff) <= now) return;
+    const match = enriched.find((m) => m.id === matchId);
+    if (!match || !isPlayable(match)) return;
+    if (Date.parse(match.kickoff) <= now) return;
 
-    // Volver a pulsar la opción ya elegida la deselecciona.
     const nextPick = picks[matchId] === pick ? null : pick;
     const next = { ...picks };
     if (nextPick) next[matchId] = nextPick;
@@ -163,13 +224,16 @@ export function PredictionForm({ matches }: Props) {
     }
   }
 
-  const completed = Object.keys(picks).length;
-  const progress = matches.length > 0 ? (completed / matches.length) * 100 : 0;
-  const visibleMatches = matches.filter((m) => (m.matchday ?? 1) === activeMd);
-  const mdPicked = (md: number) =>
-    matches.filter((m) => (m.matchday ?? 1) === md && picks[m.id]).length;
-  const mdTotal = (md: number) =>
-    matches.filter((m) => (m.matchday ?? 1) === md).length;
+  // Totales sobre lo pronosticable (los cruces KO aún sin equipos no cuentan).
+  const playable = enriched.filter(isPlayable);
+  const completed = playable.filter((m) => picks[m.id]).length;
+  const progress = playable.length > 0 ? (completed / playable.length) * 100 : 0;
+  const visibleMatches = enriched.filter((m) => phaseOf(m).key === activePhase);
+  const phasePicked = (key: string) =>
+    enriched.filter((m) => phaseOf(m).key === key && isPlayable(m) && picks[m.id])
+      .length;
+  const phaseTotal = (key: string) =>
+    enriched.filter((m) => phaseOf(m).key === key && isPlayable(m)).length;
 
   if (!hydrated) {
     return <PredictionsSkeleton rows={Math.min(matches.length, 6)} />;
@@ -203,7 +267,7 @@ export function PredictionForm({ matches }: Props) {
                 {completed}
               </span>
               <span className="text-muted-foreground text-sm">
-                / {matches.length}
+                / {playable.length}
               </span>
             </div>
           </div>
@@ -224,30 +288,30 @@ export function PredictionForm({ matches }: Props) {
           />
         </div>
         <p className="text-[11px] text-muted-foreground mt-3">
-          Elige <span className="text-foreground">quién gana</span> cada partido
-          (o empate). 1 punto por acierto.
+          Elige <span className="text-foreground">quién gana</span> cada partido.
+          1 punto por acierto. En eliminatorias eliges quién pasa.
         </p>
       </div>
 
-      {/* Pestañas por jornada */}
+      {/* Pestañas por fase (jornadas de grupo + rondas de eliminatoria) */}
       <div className="flex gap-2 mb-5 overflow-x-auto">
-        {matchdays.map((md) => (
+        {phases.map((p) => (
           <button
-            key={md}
-            onClick={() => setActiveMd(md)}
+            key={p.key}
+            onClick={() => setActivePhase(p.key)}
             className={`shrink-0 px-4 py-2 rounded-full text-sm font-semibold border transition-colors ${
-              activeMd === md
+              activePhase === p.key
                 ? "border-accent bg-accent text-accent-foreground"
                 : "border-border text-muted-foreground hover:bg-surface-muted"
             }`}
           >
-            Jornada {md}
+            {p.label}
             <span
               className={`ml-1.5 text-xs ${
-                activeMd === md ? "opacity-80" : "opacity-60"
+                activePhase === p.key ? "opacity-80" : "opacity-60"
               }`}
             >
-              {mdPicked(md)}/{mdTotal(md)}
+              {phasePicked(p.key)}/{phaseTotal(p.key)}
             </span>
           </button>
         ))}
@@ -266,9 +330,10 @@ export function PredictionForm({ matches }: Props) {
             ? winnerOf(Number(result!.home), Number(result!.away))
             : null;
           const scored = finished && pick ? scorePick(pick, result!) : null;
-          // El partido ya empezó: no se puede editar.
+          const playableMatch = isPlayable(match);
           const started = Date.parse(match.kickoff) <= now;
-          const locked = started || finished;
+          const locked = started || finished || !playableMatch;
+          const knockout = isKnockout(match);
 
           return (
             <li
@@ -279,10 +344,15 @@ export function PredictionForm({ matches }: Props) {
             >
               <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground mb-3 flex justify-between gap-2 font-semibold">
                 <span>
-                  Grupo {match.group} · J{match.matchday}
+                  {knockout
+                    ? stageLabel(match.stage)
+                    : `Grupo ${match.group} · J${match.matchday}`}
                 </span>
                 <span className="flex items-center gap-2">
-                  {locked && !finished && (
+                  {!playableMatch && (
+                    <span className="text-muted-foreground">Por definir</span>
+                  )}
+                  {playableMatch && locked && !finished && (
                     <span className="text-muted-foreground">🔒 Cerrado</span>
                   )}
                   <span className="font-mono">
@@ -291,7 +361,7 @@ export function PredictionForm({ matches }: Props) {
                 </span>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className={`grid gap-2 ${knockout ? "grid-cols-2" : "grid-cols-3"}`}>
                 <PickButton
                   selected={pick === "home"}
                   correct={actual === "home"}
@@ -299,18 +369,20 @@ export function PredictionForm({ matches }: Props) {
                   locked={locked}
                   onClick={() => choose(match.id, "home")}
                   flag={home?.flag}
-                  label={home?.name ?? "Local"}
-                  sub="Gana"
+                  label={home?.name ?? "Por definir"}
+                  sub={knockout ? "Pasa" : "Gana"}
                 />
-                <PickButton
-                  selected={pick === "draw"}
-                  correct={actual === "draw"}
-                  finished={finished}
-                  locked={locked}
-                  onClick={() => choose(match.id, "draw")}
-                  label="Empate"
-                  sub="X"
-                />
+                {!knockout && (
+                  <PickButton
+                    selected={pick === "draw"}
+                    correct={actual === "draw"}
+                    finished={finished}
+                    locked={locked}
+                    onClick={() => choose(match.id, "draw")}
+                    label="Empate"
+                    sub="X"
+                  />
+                )}
                 <PickButton
                   selected={pick === "away"}
                   correct={actual === "away"}
@@ -318,8 +390,8 @@ export function PredictionForm({ matches }: Props) {
                   locked={locked}
                   onClick={() => choose(match.id, "away")}
                   flag={away?.flag}
-                  label={away?.name ?? "Visitante"}
-                  sub="Gana"
+                  label={away?.name ?? "Por definir"}
+                  sub={knockout ? "Pasa" : "Gana"}
                 />
               </div>
 
@@ -365,7 +437,6 @@ function PickButton({
   label: string;
   sub: string;
 }) {
-  // Resalta en verde el ganador real cuando el partido ya terminó.
   const base =
     "flex flex-col items-center justify-center gap-1 rounded-xl border px-2 py-3 text-center transition-all min-h-[4.5rem]";
   const state = finished
@@ -375,8 +446,7 @@ function PickButton({
         ? "border-pink/50 bg-pink/10"
         : "border-border opacity-60"
     : locked
-      ? // Empezado (sin resultado aún): muestra tu elección, sin poder editar.
-        selected
+      ? selected
         ? "border-accent bg-accent-soft"
         : "border-border opacity-60"
       : selected
