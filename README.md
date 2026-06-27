@@ -88,16 +88,23 @@ API-Football ──> /api/sync (cron, server) ──> Supabase ──> web (lee 
    npm run backfill
    ```
 
-5. **Cron**: en Vercel el cron de `vercel.json` llama a `/api/sync?mode=auto`
-   cada minuto (Vercel envía `Authorization: Bearer $CRON_SECRET`). Sin Vercel,
-   apunta cualquier cron a `https://TU-DOMINIO/api/sync?mode=auto&secret=$CRON_SECRET`.
+5. **Cron**: `vercel.json` trae un cron **diario** (`0 12 * * *`) que llama a
+   `/api/sync?mode=auto` (Vercel envía `Authorization: Bearer $CRON_SECRET`).
+   Es compatible con el plan **Hobby**, pero solo refresca una vez al día.
 
-   - `mode=auto` — sync completa periódica + en vivo durante partidos
-   - `mode=live` — solo marcadores en vivo
-   - `mode=full` — recarga todos los partidos
+   **Para actualización casi en vivo** (recomendado), añade un cron externo
+   gratis (p. ej. [cron-job.org](https://cron-job.org)) cada 1-2 min apuntando a:
 
-> Nota: el plan Hobby de Vercel limita los crons a una vez al día; para cadencia
-> de minutos usa el plan Pro o un cron externo (p. ej. cron-job.org).
+   ```
+   https://TU-DOMINIO/api/sync?mode=auto&secret=TU_CRON_SECRET
+   ```
+
+   Modos: `auto` (completa periódica + en vivo durante partidos) · `live` (solo
+   marcadores) · `full` (recarga todo).
+
+> Nota: el plan **Hobby** de Vercel limita los crons a una vez al día. Para usar
+> el cron de minutos directamente en Vercel necesitas el plan **Pro** (entonces
+> cambia el `schedule` de `vercel.json` a `* * * * *`).
 
 ## Estructura
 
