@@ -11,6 +11,7 @@ import { getSupabase } from "@/lib/supabase/client";
 import { fetchResults } from "@/lib/results";
 import { stageLabel } from "@/lib/utils/format";
 import { MatchDetailView } from "@/components/MatchDetailView";
+import { MatchPrediction } from "@/components/MatchPrediction";
 import type { MatchDetail } from "@/lib/providers";
 import type { Pick } from "@/lib/scoring";
 
@@ -40,6 +41,12 @@ export default function MatchDetailPage() {
     awayTeamId?: string | null;
   } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   // Estado del partido + marcador en vivo + cronología (refrescable en directo).
   const fetchLive = useCallback(async () => {
@@ -63,6 +70,19 @@ export default function MatchDetailPage() {
       setDetail(mi.detail ?? null);
     }
     setResult(results[id] ?? null);
+  }, [id]);
+
+  // Refresca la lista de "pronósticos de la gente" (también tras guardar el propio).
+  const reloadPicks = useCallback(async () => {
+    const { data } = await getSupabase()
+      .from("mundial_predictions")
+      .select("user_id, pick")
+      .eq("match_id", id);
+    setPicks(
+      (data ?? [])
+        .filter((r) => r.pick)
+        .map((r) => ({ userId: r.user_id as string, pick: r.pick as Pick })),
+    );
   }, [id]);
 
   useEffect(() => {
@@ -125,12 +145,24 @@ export default function MatchDetailPage() {
     );
   }
 
-  const home = getTeam(info?.homeTeamId ?? match.homeTeamId);
-  const away = getTeam(info?.awayTeamId ?? match.awayTeamId);
+  const homeTeamId = info?.homeTeamId ?? match.homeTeamId;
+  const awayTeamId = info?.awayTeamId ?? match.awayTeamId;
+  const home = getTeam(homeTeamId);
+  const away = getTeam(awayTeamId);
   const finished = Boolean(result && result.home !== "" && result.away !== "");
   const isLive = info?.status === "live";
   const hasLiveScore = info != null && info.home != null && info.away != null;
   const byPick = (p: Pick) => picks.filter((e) => e.pick === p);
+
+  // Partido con los equipos reales (incluye eliminatoria una vez asignada).
+  const enrichedMatch = { ...match, homeTeamId, awayTeamId };
+  // Cerrado para pronosticar si ya empezó/terminó o aún no hay rivales.
+  const started =
+    finished ||
+    isLive ||
+    info?.status === "finished" ||
+    now >= Date.parse(match.kickoff);
+  const predLocked = started || !homeTeamId || !awayTeamId;
 
   return (
     <div className="mx-auto max-w-2xl px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
@@ -223,6 +255,14 @@ export default function MatchDetailPage() {
           away={away}
         />
       )}
+
+      {/* Tu pronóstico (editable si el partido no ha empezado) */}
+      <MatchPrediction
+        match={enrichedMatch}
+        locked={predLocked}
+        result={result}
+        onSaved={reloadPicks}
+      />
 
       {/* Pronósticos de la gente */}
       <h2 className="text-xl font-bold tracking-tight mb-4">
