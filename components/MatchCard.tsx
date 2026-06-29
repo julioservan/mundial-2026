@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Match, MatchStage } from "@/types";
 import { getTeam } from "@/lib/data/teams";
-import { stageLabel } from "@/lib/utils/format";
+import { stageLabel, formatMatchTime } from "@/lib/utils/format";
 import { LocalTime } from "@/components/LocalTime";
 
 interface Props {
@@ -152,10 +152,10 @@ export function MatchCard({ match, href, result, live, scorers }: Props) {
           </div>
         )}
 
-        <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-[11px] text-muted-foreground">
-          <span className="truncate">{match.venue.stadium}</span>
-          <span className="font-mono text-muted-foreground/70 shrink-0 ml-2">
-            {match.venue.city}
+        <div className="mt-4 pt-3 border-t border-border flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+          <span className="truncate">🏟 {match.venue.stadium}</span>
+          <span className="font-mono text-muted-foreground/70 shrink-0">
+            {formatMatchTime(match.kickoff, match.venue.tz)} · {match.venue.short}
           </span>
         </div>
       </div>
