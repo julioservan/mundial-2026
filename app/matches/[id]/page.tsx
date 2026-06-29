@@ -186,11 +186,30 @@ export default function MatchDetailPage() {
   const homeGoals = goalEvents.filter((e) => e.teamId === homeTeamId);
   const awayGoals = goalEvents.filter((e) => e.teamId === awayTeamId);
 
-  // Marcador en vivo: del feed (fixtures) y, si no ha llegado, contando los
-  // goles de la cronología. Se muestra mientras el partido no haya terminado,
-  // sin depender de que el estado "live" llegue a tiempo.
-  const liveHome = info?.home ?? (goalEvents.length ? homeGoals.length : null);
-  const liveAway = info?.away ?? (goalEvents.length ? awayGoals.length : null);
+  // Recuento de goles desde la cronología (el gol en propia suma al rival).
+  let evHome = 0;
+  let evAway = 0;
+  for (const e of goalEvents) {
+    const own = e.detail === "Own Goal";
+    if ((e.teamId === homeTeamId) !== own) evHome += 1;
+    else evAway += 1;
+  }
+
+  // Marcador en vivo: el mayor entre el feed (fixtures) y los goles de la
+  // cronología (que llegan antes), para que el marcador y los goleadores salgan
+  // a la vez. Se muestra mientras el partido no haya terminado.
+  const liveHome =
+    info?.home != null
+      ? Math.max(info.home, evHome)
+      : goalEvents.length
+        ? evHome
+        : null;
+  const liveAway =
+    info?.away != null
+      ? Math.max(info.away, evAway)
+      : goalEvents.length
+        ? evAway
+        : null;
   const hasLiveScore = liveHome != null && liveAway != null;
   const isLive = !finished && (info?.status === "live" || hasLiveScore);
   // Minuto aproximado en vivo: el del último evento (gol/tarjeta/cambio).
