@@ -65,7 +65,13 @@ export function MatchesView() {
       fixtures[id]?.status === "finished"
     );
   };
-  const isLive = (id: string) => fixtures[id]?.status === "live";
+  // En juego: estado "live" o ya con goles aunque el estado venga atrasado,
+  // siempre que no haya terminado.
+  const isLive = (id: string) => {
+    const fx = fixtures[id];
+    if (!fx || isFinished(id)) return false;
+    return fx.status === "live" || (fx.homeScore != null && fx.awayScore != null);
+  };
 
   const upcoming = enriched
     .filter((m) => !isFinished(m.id))
@@ -77,8 +83,9 @@ export function MatchesView() {
 
   function liveScore(id: string) {
     const fx = fixtures[id];
-    // En juego: mostramos el marcador siempre (0-0 si aún no hay goles).
-    if (fx?.status === "live") {
+    // En juego: marcador siempre (0-0 si aún no hay goles), sin depender de que
+    // el estado "live" llegue a tiempo.
+    if (fx && isLive(id)) {
       return { home: fx.homeScore ?? 0, away: fx.awayScore ?? 0 };
     }
     return null;
