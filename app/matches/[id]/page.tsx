@@ -145,11 +145,17 @@ export default function MatchDetailPage() {
   }, [id, fetchLive]);
 
   // Mientras el partido esté en vivo, refresca marcador y cronología cada 30 s.
+  // Sondea mientras el partido no haya terminado y ya esté (cerca de) empezado,
+  // sin depender de que el estado "live" llegue a tiempo.
   useEffect(() => {
-    if (info?.status !== "live") return;
+    if (!match) return;
+    const finishedNow = Boolean(result && result.home !== "" && result.away !== "");
+    if (finishedNow) return;
+    const kickoffMs = Date.parse(info?.kickoff ?? match.kickoff);
+    if (now < kickoffMs - 15 * 60_000) return;
     const t = setInterval(() => void fetchLive(), 30_000);
     return () => clearInterval(t);
-  }, [info?.status, fetchLive]);
+  }, [match, result, info?.kickoff, now, fetchLive]);
 
   if (!match) {
     return (
@@ -172,8 +178,21 @@ export default function MatchDetailPage() {
   const home = getTeam(homeTeamId);
   const away = getTeam(awayTeamId);
   const finished = Boolean(result && result.home !== "" && result.away !== "");
-  const isLive = info?.status === "live";
-  const hasLiveScore = info != null && info.home != null && info.away != null;
+
+  // Goleadores derivados de la cronología (también respaldan el marcador).
+  const goalEvents = (detail?.events ?? []).filter(
+    (e) => e.type.toLowerCase() === "goal" && e.detail !== "Missed Penalty",
+  );
+  const homeGoals = goalEvents.filter((e) => e.teamId === homeTeamId);
+  const awayGoals = goalEvents.filter((e) => e.teamId === awayTeamId);
+
+  // Marcador en vivo: del feed (fixtures) y, si no ha llegado, contando los
+  // goles de la cronología. Se muestra mientras el partido no haya terminado,
+  // sin depender de que el estado "live" llegue a tiempo.
+  const liveHome = info?.home ?? (goalEvents.length ? homeGoals.length : null);
+  const liveAway = info?.away ?? (goalEvents.length ? awayGoals.length : null);
+  const hasLiveScore = liveHome != null && liveAway != null;
+  const isLive = !finished && (info?.status === "live" || hasLiveScore);
   // Minuto aproximado en vivo: el del último evento (gol/tarjeta/cambio).
   const liveMinute = isLive
     ? (detail?.events ?? []).reduce(
@@ -183,16 +202,11 @@ export default function MatchDetailPage() {
     : 0;
   const byPick = (p: Pick) => picks.filter((e) => e.pick === p);
 
-  // Goleadores derivados de los eventos, con foto (vía valoraciones de jugadores).
+  // Foto de cada goleador (vía valoraciones de jugadores).
   const photoById: Record<number, string> = {};
   for (const p of detail?.players ?? []) {
     if (p.id != null && p.photo) photoById[p.id] = p.photo;
   }
-  const goalEvents = (detail?.events ?? []).filter(
-    (e) => e.type.toLowerCase() === "goal" && e.detail !== "Missed Penalty",
-  );
-  const homeGoals = goalEvents.filter((e) => e.teamId === homeTeamId);
-  const awayGoals = goalEvents.filter((e) => e.teamId === awayTeamId);
 
   // Partido con los equipos y la hora reales (eliminatoria una vez asignada).
   const enrichedMatch = { ...match, homeTeamId, awayTeamId, kickoff };
@@ -250,9 +264,9 @@ export default function MatchDetailPage() {
               <span className="text-4xl text-foreground">
                 {result!.home}–{result!.away}
               </span>
-            ) : isLive && hasLiveScore ? (
+            ) : isLive ? (
               <span className="text-4xl text-pink">
-                {info!.home}–{info!.away}
+                {liveHome ?? 0}–{liveAway ?? 0}
               </span>
             ) : (
               <span className="text-2xl text-muted-foreground">vs</span>
