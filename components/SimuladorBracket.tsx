@@ -2,11 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
+import Link from "next/link";
 import type { MatchStage } from "@/types";
 import { KNOCKOUT_SLOTS } from "@/lib/data/matches";
 import { getTeam } from "@/lib/data/teams";
 import { fetchFixtureAssignments } from "@/lib/fixtures";
 import type { SlotAssignment } from "@/lib/bracket";
+import { fetchResults, type ResultMap } from "@/lib/results";
+import { winnerOf as resultWinner } from "@/lib/scoring";
+import { useAuth } from "@/lib/supabase/auth";
+import {
+  fetchMySimulador,
+  saveMySimulador,
+  fetchAllSimuladores,
+  type SimuladorFriend,
+} from "@/lib/simulador";
+import { Avatar } from "@/components/Avatar";
 
 type Side = "home" | "away";
 type Picks = Record<string, Side>;
@@ -33,6 +44,16 @@ const ORDER: string[] = [
   ...KNOCKOUT_SLOTS.semifinal,
   KNOCKOUT_SLOTS.final,
 ];
+
+// Fases de la eliminatoria, de la más temprana a la final, para el desglose.
+const PHASES: { key: string; label: string; ids: string[]; roundIdx: number }[] =
+  [
+    { key: "round32", label: "Dieciseisavos", ids: KNOCKOUT_SLOTS.round32, roundIdx: 0 },
+    { key: "round16", label: "Octavos", ids: KNOCKOUT_SLOTS.round16, roundIdx: 1 },
+    { key: "quarterfinal", label: "Cuartos", ids: KNOCKOUT_SLOTS.quarterfinal, roundIdx: 2 },
+    { key: "semifinal", label: "Semifinales", ids: KNOCKOUT_SLOTS.semifinal, roundIdx: 3 },
+    { key: "final", label: "Final", ids: [KNOCKOUT_SLOTS.final], roundIdx: 4 },
+  ];
 
 // --- Geometría del cuadro radial -------------------------------------------
 const CX = 500;
@@ -155,22 +176,36 @@ interface BNode {
 }
 
 export function SimuladorBracket() {
+  const { user } = useAuth();
   const [assignments, setAssignments] = useState<Record<string, SlotAssignment>>(
     {},
   );
-  const [picks, setPicks] = useState<Picks>(readInitialPicks);
+  const [results, setResults] = useState<ResultMap>({});
+  const [draft, setDraft] = useState<Picks>(readInitialPicks);
   const [hydrated, setHydrated] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Equipos reales de 16avos desde el feed. Al resolver (o fallar) marcamos
+  // Mi cuadro guardado (bloqueado) y el de los amigos.
+  const [lockedPicks, setLockedPicks] = useState<Picks | null>(null);
+  const [friends, setFriends] = useState<SimuladorFriend[]>([]);
+  const [viewing, setViewing] = useState<SimuladorFriend | null>(null); // null = el mío
+  const [confirmSave, setConfirmSave] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Equipos reales de 16avos + resultados desde la API. Al resolver marcamos
   // hidratado para pintar el cuadro real solo en cliente y evitar desajustes.
   useEffect(() => {
     let active = true;
-    fetchFixtureAssignments()
-      .then((a) => {
-        if (active) setAssignments(a);
+    Promise.all([
+      fetchFixtureAssignments().catch(() => ({})),
+      fetchResults().catch(() => ({})),
+    ])
+      .then(([a, r]) => {
+        if (!active) return;
+        setAssignments(a as Record<string, SlotAssignment>);
+        setResults(r as ResultMap);
       })
-      .catch(() => {})
       .finally(() => {
         if (active) setHydrated(true);
       });
@@ -179,6 +214,24 @@ export function SimuladorBracket() {
     };
   }, []);
 
+  // Carga mi cuadro guardado y la lista de amigos al iniciar sesión.
+  useEffect(() => {
+    let active = true;
+    fetchAllSimuladores()
+      .then((all) => active && setFriends(all))
+      .catch(() => {});
+    if (user) {
+      fetchMySimulador(user.id)
+        .then((row) => {
+          if (active) setLockedPicks(row?.locked ? (row.picks as Picks) : null);
+        })
+        .catch(() => {});
+    }
+    return () => {
+      active = false;
+    };
+  }, [user]);
+
   const persist = useCallback((next: Picks) => {
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
@@ -186,6 +239,13 @@ export function SimuladorBracket() {
       // ignora si no hay almacenamiento
     }
   }, []);
+
+  // Mi cuadro bloqueado solo cuenta si hay sesión.
+  const effectiveLocked = user ? lockedPicks : null;
+  // Picks que se muestran: el de un amigo, o el mío (bloqueado o borrador).
+  const picks = viewing ? (viewing.picks as Picks) : (effectiveLocked ?? draft);
+  // Solo se edita el cuadro propio que aún no está guardado.
+  const editable = !viewing && !effectiveLocked;
 
   const winnerOf = useCallback(
     (m: SimMatch): string | null => {
@@ -318,10 +378,54 @@ export function SimuladorBracket() {
 
   const championTeam = getTeam(graph.champion);
   const pickedCount = ORDER.filter((id) => picks[id]).length;
+  const complete = pickedCount === ORDER.length;
+
+  // Ganador REAL de cada cruce según la API (resultado + equipos del feed).
+  // Independiente del resto de la web: solo mira cómo quedaron los partidos.
+  const actualWinners = useMemo<Record<string, string | null>>(() => {
+    const out: Record<string, string | null> = {};
+    for (const id of ORDER) {
+      const a = assignments[id];
+      const r = results[id];
+      if (!a?.homeTeamId || !a?.awayTeamId || !r) {
+        out[id] = null;
+        continue;
+      }
+      const w = resultWinner(Number(r.home), Number(r.away));
+      out[id] = w === "home" ? a.homeTeamId : w === "away" ? a.awayTeamId : null;
+    }
+    return out;
+  }, [assignments, results]);
+
+  // Acierto = el equipo que pusiste como ganador del cruce ganó de verdad.
+  const score = useMemo(() => {
+    const byPhase: Record<string, { hits: number; played: number }> = {};
+    let hits = 0;
+    let played = 0;
+    const matchById = new Map<string, SimMatch>(
+      rounds.flatMap((rd) => rd.matches.map((m) => [m.id, m] as [string, SimMatch])),
+    );
+    for (const ph of PHASES) {
+      let h = 0;
+      let p = 0;
+      for (const id of ph.ids) {
+        const actual = actualWinners[id];
+        if (!actual) continue; // aún no jugado / sin ganador claro
+        p++;
+        const m = matchById.get(id);
+        const predicted = m ? winnerOf(m) : null;
+        if (predicted && predicted === actual) h++;
+      }
+      byPhase[ph.key] = { hits: h, played: p };
+      hits += h;
+      played += p;
+    }
+    return { hits, played, byPhase };
+  }, [actualWinners, rounds, winnerOf]);
 
   function choose(parent: SimMatch, side: Side) {
-    if (!parent.home || !parent.away) return;
-    setPicks((prev) => {
+    if (!editable || !parent.home || !parent.away) return;
+    setDraft((prev) => {
       const next = { ...prev, [parent.id]: side };
       persist(next);
       return next;
@@ -329,10 +433,30 @@ export function SimuladorBracket() {
   }
 
   function reset() {
-    setPicks({});
+    if (!editable) return;
+    setDraft({});
     persist({});
     if (typeof window !== "undefined") {
       window.history.replaceState(null, "", window.location.pathname);
+    }
+  }
+
+  async function save() {
+    if (!user || !complete) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await saveMySimulador(user.id, draft);
+      setLockedPicks(draft);
+      setConfirmSave(false);
+      // Refresca la lista de amigos para incluir el cuadro recién guardado.
+      fetchAllSimuladores()
+        .then(setFriends)
+        .catch(() => {});
+    } catch {
+      setSaveError("No se pudo guardar. Inténtalo de nuevo.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -356,6 +480,35 @@ export function SimuladorBracket() {
 
   return (
     <div>
+      {/* Banner de "estás viendo el cuadro de…" o "tu cuadro está guardado" */}
+      {viewing ? (
+        <div className="mb-4 flex items-center justify-between gap-3 flex-wrap rounded-2xl border border-accent/40 bg-accent-soft px-4 py-3">
+          <div className="flex items-center gap-2 text-sm">
+            <Avatar url={viewing.avatarUrl} name={viewing.username} size={28} />
+            <span>
+              Estás viendo el cuadro de{" "}
+              <span className="font-semibold">{viewing.username}</span>
+            </span>
+          </div>
+          <button
+            onClick={() => setViewing(null)}
+            className="text-sm font-semibold text-accent hover:underline underline-offset-4"
+          >
+            ← Volver al mío
+          </button>
+        </div>
+      ) : (
+        effectiveLocked && (
+          <div className="mb-4 rounded-2xl border border-accent/40 bg-accent-soft px-4 py-3 text-sm flex items-center gap-2">
+            <span aria-hidden>🔒</span>
+            <span>
+              Tu cuadro está <span className="font-semibold">guardado</span>. Ya no
+              se puede cambiar; abajo se van anotando tus aciertos.
+            </span>
+          </div>
+        )
+      )}
+
       {/* Campeón + acciones */}
       <div className="flex items-center justify-between gap-4 flex-wrap mb-6">
         <div className="flex items-center gap-3">
@@ -364,7 +517,7 @@ export function SimuladorBracket() {
           </span>
           <div>
             <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-              Tu campeón
+              {viewing ? `Campeón de ${viewing.username}` : "Tu campeón"}
             </div>
             <div className="text-2xl font-bold tracking-tight flex items-center gap-2">
               {championTeam ? (
@@ -381,19 +534,44 @@ export function SimuladorBracket() {
         <div className="flex items-center gap-2">
           <button
             onClick={share}
-            className="px-4 py-2 rounded-full text-sm font-semibold bg-accent text-accent-foreground hover:opacity-90 transition-opacity"
+            className="px-4 py-2 rounded-full text-sm font-semibold border border-border text-muted-foreground hover:bg-surface-muted transition-colors"
           >
             {copied ? "¡Enlace copiado!" : "Compartir"}
           </button>
-          <button
-            onClick={reset}
-            disabled={pickedCount === 0}
-            className="px-4 py-2 rounded-full text-sm font-semibold border border-border text-muted-foreground hover:bg-surface-muted transition-colors disabled:opacity-40"
-          >
-            Reiniciar
-          </button>
+          {editable && (
+            <>
+              <button
+                onClick={reset}
+                disabled={pickedCount === 0}
+                className="px-4 py-2 rounded-full text-sm font-semibold border border-border text-muted-foreground hover:bg-surface-muted transition-colors disabled:opacity-40"
+              >
+                Reiniciar
+              </button>
+              <button
+                onClick={() => (user ? setConfirmSave(true) : undefined)}
+                disabled={!complete}
+                title={
+                  !complete
+                    ? "Completa el cuadro hasta el campeón para guardar"
+                    : undefined
+                }
+                className="px-4 py-2 rounded-full text-sm font-semibold bg-accent text-accent-foreground hover:opacity-90 transition-opacity disabled:opacity-40"
+              >
+                Guardar
+              </button>
+            </>
+          )}
         </div>
       </div>
+
+      {editable && !user && (
+        <p className="-mt-2 mb-6 text-xs text-muted-foreground">
+          <Link href="/login" className="text-accent font-semibold hover:underline underline-offset-4">
+            Inicia sesión
+          </Link>{" "}
+          para guardar tu cuadro y compararlo con tus amigos.
+        </p>
+      )}
 
       {/* Cuadro radial */}
       <div className="max-w-3xl mx-auto relative">
@@ -430,7 +608,7 @@ export function SimuladorBracket() {
 
           {/* Nodos del cuadro */}
           {graph.nodes.map((n) => {
-            const clickable = Boolean(n.parent?.home && n.parent?.away);
+            const clickable = editable && Boolean(n.parent?.home && n.parent?.away);
             const selected = n.parent ? picks[n.parent.id] === n.side : false;
             return (
               <SimNode
@@ -492,12 +670,202 @@ export function SimuladorBracket() {
         </svg>
       </div>
 
-      <p className="text-[11px] text-muted-foreground mt-4 text-center max-w-xl mx-auto">
-        Toca el equipo que crees que pasa en cada cruce; el ganador avanza solo
-        hacia el centro hasta coronar a tu campeón. Tu quiniela se guarda en este
-        navegador y puedes compartirla con el botón. {pickedCount}/{ORDER.length}{" "}
-        cruces elegidos.
-      </p>
+      {editable && (
+        <p className="text-[11px] text-muted-foreground mt-4 text-center max-w-xl mx-auto">
+          Toca el equipo que crees que pasa en cada cruce; el ganador avanza solo
+          hacia el centro hasta coronar a tu campeón. {pickedCount}/{ORDER.length}{" "}
+          cruces elegidos.
+        </p>
+      )}
+
+      {/* Cuadros de los amigos */}
+      {friends.length > 0 && (
+        <div className="mt-10">
+          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+            Cuadros de tus amigos
+          </h3>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {!viewing && effectiveLocked && (
+              <span className="shrink-0 px-3 py-1.5 rounded-full text-sm font-semibold bg-accent text-accent-foreground">
+                Tú
+              </span>
+            )}
+            {viewing && (
+              <button
+                onClick={() => setViewing(null)}
+                className="shrink-0 px-3 py-1.5 rounded-full text-sm font-semibold border border-accent text-accent hover:bg-accent-soft transition-colors"
+              >
+                ← Mi cuadro
+              </button>
+            )}
+            {friends
+              .filter((f) => f.userId !== user?.id)
+              .map((f) => (
+                <button
+                  key={f.userId}
+                  onClick={() => setViewing(f)}
+                  className={`shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold border transition-colors ${
+                    viewing?.userId === f.userId
+                      ? "border-accent bg-accent text-accent-foreground"
+                      : "border-border text-muted-foreground hover:bg-surface-muted"
+                  }`}
+                >
+                  <Avatar url={f.avatarUrl} name={f.username} size={20} />
+                  {f.username}
+                </button>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* Aciertos + desglose por fase */}
+      <div className="mt-8">
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+          <h3 className="text-lg font-bold tracking-tight">
+            {viewing ? `Votos de ${viewing.username}` : "Mis votos por fase"}
+          </h3>
+          <div className="text-sm">
+            <span className="font-bold text-accent text-lg tabular-nums">
+              {score.hits}
+            </span>{" "}
+            <span className="text-muted-foreground">
+              {score.hits === 1 ? "acierto" : "aciertos"} de {score.played}{" "}
+              {score.played === 1 ? "partido jugado" : "partidos jugados"}
+            </span>
+          </div>
+        </div>
+
+        <div className="space-y-5">
+          {PHASES.map((ph) => (
+            <PhaseVotes
+              key={ph.key}
+              label={ph.label}
+              matches={rounds[ph.roundIdx].matches}
+              picks={picks}
+              actualWinners={actualWinners}
+              stats={score.byPhase[ph.key]}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Diálogo de guardado (bloqueo irreversible) */}
+      {confirmSave && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-surface border border-border p-6 text-center">
+            <div className="text-4xl mb-3" aria-hidden>
+              ⚠️
+            </div>
+            <h4 className="text-xl font-bold tracking-tight mb-2">
+              ¿Guardar definitivamente?
+            </h4>
+            <p className="text-sm text-muted-foreground mb-6">
+              Ojo: una vez guardes, <span className="font-semibold text-foreground">no podrás cambiar tu cuadro</span>. A
+              partir de ahí solo se irán anotando tus aciertos según los
+              resultados.
+            </p>
+            {saveError && (
+              <p className="text-sm text-pink mb-3">{saveError}</p>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmSave(false)}
+                disabled={saving}
+                className="flex-1 px-4 py-2.5 rounded-full text-sm font-semibold border border-border text-muted-foreground hover:bg-surface-muted transition-colors disabled:opacity-40"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={save}
+                disabled={saving}
+                className="flex-1 px-4 py-2.5 rounded-full text-sm font-semibold bg-accent text-accent-foreground hover:opacity-90 transition-opacity disabled:opacity-60"
+              >
+                {saving ? "Guardando…" : "Sí, guardar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Desglose de los votos de una fase: cada cruce con el equipo elegido y, si ya
+// se jugó, si fue acierto (✓) o fallo (✗).
+function PhaseVotes({
+  label,
+  matches,
+  picks,
+  actualWinners,
+  stats,
+}: {
+  label: string;
+  matches: SimMatch[];
+  picks: Picks;
+  actualWinners: Record<string, string | null>;
+  stats: { hits: number; played: number } | undefined;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {label}
+        </h4>
+        {stats && stats.played > 0 && (
+          <span className="text-[11px] font-semibold text-muted-foreground tabular-nums">
+            {stats.hits}/{stats.played}
+          </span>
+        )}
+      </div>
+      <div className="grid sm:grid-cols-2 gap-2">
+        {matches.map((m) => {
+          const picked = picks[m.id];
+          const pickedTeam = getTeam(
+            picked === "home" ? m.home : picked === "away" ? m.away : null,
+          );
+          const actual = actualWinners[m.id];
+          const pickedId = picked === "home" ? m.home : picked === "away" ? m.away : null;
+          const status: "hit" | "miss" | "pending" = !actual
+            ? "pending"
+            : pickedId && pickedId === actual
+              ? "hit"
+              : "miss";
+          return (
+            <div
+              key={m.id}
+              className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${
+                status === "hit"
+                  ? "border-accent/50 bg-accent-soft"
+                  : status === "miss"
+                    ? "border-border bg-surface opacity-70"
+                    : "border-border bg-surface"
+              }`}
+            >
+              <span className="text-base shrink-0" aria-hidden>
+                {pickedTeam?.flag ?? "•"}
+              </span>
+              <span className="truncate flex-1">
+                {pickedTeam?.name ?? (
+                  <span className="text-muted-foreground/60">Sin elegir</span>
+                )}
+              </span>
+              {status === "hit" && (
+                <span className="text-accent text-xs font-bold shrink-0" aria-hidden>
+                  ✓
+                </span>
+              )}
+              {status === "miss" && (
+                <span
+                  className="text-muted-foreground text-xs font-bold shrink-0"
+                  aria-hidden
+                >
+                  ✗
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
