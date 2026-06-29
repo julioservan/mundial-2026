@@ -9,16 +9,14 @@ import { Avatar } from "@/components/Avatar";
 import { LocalTime } from "@/components/LocalTime";
 import { getSupabase } from "@/lib/supabase/client";
 import { fetchResults } from "@/lib/results";
+import { fetchProfilesLite, type ProfileLite } from "@/lib/profiles";
 import { stageLabel } from "@/lib/utils/format";
 import { MatchDetailView } from "@/components/MatchDetailView";
 import { MatchPrediction } from "@/components/MatchPrediction";
 import type { MatchDetail } from "@/lib/providers";
 import type { Pick } from "@/lib/scoring";
 
-interface PlayerLite {
-  username: string;
-  avatar_url: string | null;
-}
+type PlayerLite = ProfileLite;
 
 export default function MatchDetailPage() {
   const params = useParams();
@@ -92,12 +90,13 @@ export default function MatchDetailPage() {
     async function load() {
       try {
         const supabase = getSupabase();
-        const [picksRes, profsRes] = await Promise.all([
+        // Datos rápidos (pronósticos del partido + perfiles cacheados).
+        const [picksRes, profs] = await Promise.all([
           supabase
             .from("mundial_predictions")
             .select("user_id, pick")
             .eq("match_id", id),
-          supabase.from("mundial_profiles").select("id, username, avatar_url"),
+          fetchProfilesLite(),
         ]);
         if (active) {
           setPicks(
@@ -105,20 +104,15 @@ export default function MatchDetailPage() {
               .filter((r) => r.pick)
               .map((r) => ({ userId: r.user_id as string, pick: r.pick as Pick })),
           );
-          const profs: Record<string, PlayerLite> = {};
-          for (const p of profsRes.data ?? []) {
-            profs[p.id as string] = {
-              username: p.username as string,
-              avatar_url: (p.avatar_url as string | null) ?? null,
-            };
-          }
           setPlayers(profs);
         }
       } catch {
         // sin datos
       }
-      await fetchLive();
+      // Ya es interactivo: el marcador en vivo y la cronología (que pueden
+      // tocar la API externa) se cargan en segundo plano sin bloquear.
       if (active) setLoading(false);
+      void fetchLive();
     }
     void load();
     return () => {
