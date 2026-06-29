@@ -228,6 +228,98 @@ function injuryTag(type: string): { label: string; cls: string } {
   return { label: "Baja", cls: "bg-pink/15 text-pink" };
 }
 
+// Traduce el motivo de baja/duda que devuelve API-Football (en inglés).
+const REASON_EXACT: Record<string, string> = {
+  suspended: "Sancionado",
+  suspension: "Sanción",
+  "red card": "Tarjeta roja",
+  "coach's decision": "Decisión del entrenador",
+  rest: "Descanso",
+  rested: "Descanso",
+  illness: "Enfermedad",
+  ill: "Enfermedad",
+  knock: "Golpe",
+  fitness: "Condición física",
+  "lack of fitness": "Falta de forma",
+  concussion: "Conmoción cerebral",
+  "personal reasons": "Motivos personales",
+  "national selection": "Con su selección",
+  doubtful: "En duda",
+  other: "Otros",
+  "covid-19": "COVID-19",
+  coronavirus: "Coronavirus",
+  "broken leg": "Pierna rota",
+  "broken foot": "Pie roto",
+  "broken ankle": "Tobillo roto",
+  "broken arm": "Brazo roto",
+};
+
+const REASON_BODY: Record<string, string> = {
+  hamstring: "isquiotibiales",
+  quadriceps: "cuádriceps",
+  knee: "rodilla",
+  ankle: "tobillo",
+  thigh: "muslo",
+  calf: "gemelo",
+  groin: "ingle",
+  adductor: "aductores",
+  achilles: "tendón de Aquiles",
+  back: "espalda",
+  shoulder: "hombro",
+  foot: "pie",
+  hip: "cadera",
+  head: "cabeza",
+  toe: "dedo del pie",
+  wrist: "muñeca",
+  elbow: "codo",
+  chest: "pecho",
+  rib: "costilla",
+  neck: "cuello",
+  finger: "dedo",
+  hand: "mano",
+  leg: "pierna",
+  arm: "brazo",
+  metatarsal: "metatarso",
+};
+
+const REASON_TYPE: Record<string, string> = {
+  injury: "Lesión",
+  strain: "Distensión",
+  sprain: "Esguince",
+  fracture: "Fractura",
+  surgery: "Cirugía",
+  problems: "Problemas",
+};
+
+function translateReason(reason: string): string {
+  const r = reason.trim();
+  if (!r) return "";
+  const lower = r.toLowerCase();
+  if (REASON_EXACT[lower]) return REASON_EXACT[lower];
+
+  const muscle = /\bmuscle\b/i.test(r);
+  let part: string | null = null;
+  for (const [en, es] of Object.entries(REASON_BODY)) {
+    if (new RegExp(`\\b${en}`, "i").test(r)) {
+      part = es;
+      break;
+    }
+  }
+  let type: string | null = null;
+  for (const [en, es] of Object.entries(REASON_TYPE)) {
+    if (new RegExp(`\\b${en}`, "i").test(r)) {
+      type = es;
+      break;
+    }
+  }
+  if (part || type) {
+    const t = type ?? "Lesión";
+    return part ? `${t}${muscle ? " muscular" : ""} de ${part}` : t;
+  }
+  // Motivo desconocido: lo dejamos tal cual.
+  return r;
+}
+
 function InjuryRow({ item }: { item: Preview["injuries"][number] }) {
   const tag = injuryTag(item.type);
   return (
@@ -242,7 +334,7 @@ function InjuryRow({ item }: { item: Preview["injuries"][number] }) {
         <div className="text-sm font-medium truncate">{item.player}</div>
         {item.reason && (
           <div className="text-xs text-muted-foreground truncate">
-            {item.reason}
+            {translateReason(item.reason)}
           </div>
         )}
       </div>
