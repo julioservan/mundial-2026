@@ -261,20 +261,12 @@ export function HomeDashboard() {
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold tracking-tight">Clasificación</h2>
-          <div className="flex items-center gap-4">
-            <Link
-              href="/players"
-              className="text-sm font-semibold text-accent hover:underline underline-offset-4"
-            >
-              Pronósticos de la gente
-            </Link>
-            <Link
-              href="/leaderboard"
-              className="text-sm font-semibold text-accent hover:underline underline-offset-4"
-            >
-              Ranking →
-            </Link>
-          </div>
+          <Link
+            href="/leaderboard"
+            className="text-sm font-semibold text-accent hover:underline underline-offset-4"
+          >
+            Ranking →
+          </Link>
         </div>
 
         {loading ? (
