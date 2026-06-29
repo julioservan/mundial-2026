@@ -8,6 +8,8 @@ interface Props {
   match: Match;
   href?: string;
   result?: { home: string; away: string } | null;
+  // Marcador EN VIVO (partido en juego). Tiene prioridad visual sobre el final.
+  live?: { home: number; away: number } | null;
   scorers?: { home: string[]; away: string[] };
 }
 
@@ -21,23 +23,29 @@ const STAGE_STRIPE: Record<MatchStage, string> = {
   final: "bg-accent",
 };
 
-export function MatchCard({ match, href, result, scorers }: Props) {
+export function MatchCard({ match, href, result, live, scorers }: Props) {
   const home = getTeam(match.homeTeamId);
   const away = getTeam(match.awayTeamId);
   const stripe = STAGE_STRIPE[match.stage];
 
-  const finished = Boolean(result && result.home !== "" && result.away !== "");
-  const homeGoals = finished ? result!.home : (match.homeScore ?? "—");
-  const awayGoals = finished ? result!.away : (match.awayScore ?? "—");
-  const homeWon = finished && Number(result!.home) > Number(result!.away);
-  const awayWon = finished && Number(result!.away) > Number(result!.home);
+  const isLive = Boolean(live);
+  const finished = !isLive && Boolean(result && result.home !== "" && result.away !== "");
+  const showScore = isLive || finished;
+  const hg = isLive ? live!.home : finished ? Number(result!.home) : null;
+  const ag = isLive ? live!.away : finished ? Number(result!.away) : null;
+  const homeGoals = showScore ? hg : (match.homeScore ?? "—");
+  const awayGoals = showScore ? ag : (match.awayScore ?? "—");
+  const homeWon = showScore && hg != null && ag != null && hg > ag;
+  const awayWon = showScore && hg != null && ag != null && ag > hg;
 
   const body = (
     <div
       className={`relative bg-surface border rounded-xl overflow-hidden transition-all hover:translate-y-[-2px] ${
-        finished
-          ? "border-accent/50 shadow-[0_0_0_1px] shadow-accent/10"
-          : "border-border hover:border-border-strong"
+        isLive
+          ? "border-pink/60 shadow-[0_0_0_1px] shadow-pink/10"
+          : finished
+            ? "border-accent/50 shadow-[0_0_0_1px] shadow-accent/10"
+            : "border-border hover:border-border-strong"
       }`}
     >
       <div className={`absolute top-0 left-0 w-1 h-full ${stripe}`} aria-hidden />
@@ -47,7 +55,11 @@ export function MatchCard({ match, href, result, scorers }: Props) {
             {match.group ? `Grupo ${match.group}` : stageLabel(match.stage)}
             {match.matchday ? ` · J${match.matchday}` : ""}
           </span>
-          {finished ? (
+          {isLive ? (
+            <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-pink bg-pink/10 border border-pink/30 rounded-full px-2 py-0.5 animate-pulse">
+              ● En vivo
+            </span>
+          ) : finished ? (
             <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-accent bg-accent-soft border border-accent/30 rounded-full px-2 py-0.5">
               ● Final
             </span>
@@ -58,7 +70,7 @@ export function MatchCard({ match, href, result, scorers }: Props) {
           )}
         </div>
 
-        {finished ? (
+        {showScore ? (
           <div className="flex items-center justify-center gap-2 py-1">
             <div className="flex-1 min-w-0 text-right">
               <div className="text-3xl leading-none" aria-hidden>
