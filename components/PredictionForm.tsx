@@ -84,6 +84,7 @@ export function PredictionForm({ matches }: Props) {
           ...m,
           homeTeamId: a.homeTeamId ?? m.homeTeamId,
           awayTeamId: a.awayTeamId ?? m.awayTeamId,
+          kickoff: a.kickoff ?? m.kickoff,
         };
       }),
     [matches, assignments],

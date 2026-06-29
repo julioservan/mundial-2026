@@ -32,6 +32,9 @@ export interface SlotAssignment {
   awayTeamId?: string | null;
   status?: MatchStatus;
   externalId?: number | null;
+  // Hora real del partido desde el feed (las de eliminatoria del calendario
+  // estático son solo placeholders hasta que se conoce el cruce).
+  kickoff?: string | null;
 }
 
 export interface BracketMatch {
