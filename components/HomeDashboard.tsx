@@ -355,14 +355,14 @@ function MatchRow({
         href={`/matches/${matchId}`}
         className="block p-4 hover:bg-surface-muted/40 transition-colors"
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
         <div className="flex-1 flex items-center justify-end gap-2 text-sm font-semibold tracking-tight min-w-0">
-          <span className="truncate text-right">{home?.name}</span>
+          <span className="line-clamp-2 leading-tight text-right">{home?.name}</span>
           <span className="text-xl shrink-0" aria-hidden>
             {home?.flag}
           </span>
         </div>
-        <div className="shrink-0 text-center px-2">
+        <div className="shrink-0 text-center px-1 sm:px-2">
           {score ? (
             <>
               <span className="font-mono font-bold text-base whitespace-nowrap">
@@ -392,7 +392,13 @@ function MatchRow({
                 </span>
               ) : (
                 <span className="text-[11px] font-mono text-muted-foreground whitespace-nowrap">
-                  <LocalTime iso={match.kickoff} mode="time" />
+                  {/* Móvil: solo la hora (ahorra ancho). Escritorio: con huso. */}
+                  <span className="sm:hidden">
+                    <LocalTime iso={match.kickoff} mode="time" showZone={false} />
+                  </span>
+                  <span className="hidden sm:inline">
+                    <LocalTime iso={match.kickoff} mode="time" />
+                  </span>
                 </span>
               )}
               <div className="text-[10px] text-muted-foreground mt-0.5">
@@ -405,7 +411,7 @@ function MatchRow({
           <span className="text-xl shrink-0" aria-hidden>
             {away?.flag}
           </span>
-          <span className="truncate">{away?.name}</span>
+          <span className="line-clamp-2 leading-tight">{away?.name}</span>
         </div>
         </div>
 
