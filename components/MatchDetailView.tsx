@@ -233,6 +233,32 @@ function num(v: string | number | null): number {
   return Number.isNaN(n) ? 0 : n;
 }
 
+// Traducción de los tipos de estadística que devuelve API-Football (en inglés).
+const STAT_LABELS: Record<string, string> = {
+  "Shots on Goal": "Tiros a puerta",
+  "Shots off Goal": "Tiros fuera",
+  "Total Shots": "Tiros totales",
+  "Blocked Shots": "Tiros bloqueados",
+  "Shots insidebox": "Tiros dentro del área",
+  "Shots outsidebox": "Tiros fuera del área",
+  Fouls: "Faltas",
+  "Corner Kicks": "Córners",
+  Offsides: "Fueras de juego",
+  "Ball Possession": "Posesión",
+  "Yellow Cards": "Tarjetas amarillas",
+  "Red Cards": "Tarjetas rojas",
+  "Goalkeeper Saves": "Paradas del portero",
+  "Total passes": "Pases totales",
+  "Passes accurate": "Pases acertados",
+  "Passes %": "% de pases",
+  expected_goals: "Goles esperados (xG)",
+  goals_prevented: "Goles evitados",
+};
+
+function statLabel(type: string): string {
+  return STAT_LABELS[type] ?? type;
+}
+
 function Stats({
   statistics,
   homeId,
@@ -262,7 +288,7 @@ function Stats({
             <div key={type}>
               <div className="flex justify-between text-xs mb-1">
                 <span className="font-semibold tabular-nums">{hv ?? "0"}</span>
-                <span className="text-muted-foreground">{type}</span>
+                <span className="text-muted-foreground">{statLabel(type)}</span>
                 <span className="font-semibold tabular-nums">{av ?? "0"}</span>
               </div>
               <div className="flex h-1.5 rounded-full overflow-hidden bg-border">

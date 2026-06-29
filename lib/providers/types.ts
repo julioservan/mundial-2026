@@ -133,6 +133,7 @@ export interface InjuryItem {
   teamId: string | null;
   teamName: string;
   player: string;
+  photo: string | null;
   reason: string; // motivo, p. ej. "Knee Injury", "Suspended"
   type: string; // "Missing Fixture" | "Questionable"
 }

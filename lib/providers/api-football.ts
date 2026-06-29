@@ -404,7 +404,7 @@ interface ApiPrediction {
 }
 
 interface ApiInjury {
-  player?: { name?: string; type?: string; reason?: string };
+  player?: { name?: string; type?: string; reason?: string; photo?: string };
   team?: { name?: string };
 }
 
@@ -454,6 +454,7 @@ function mapPreview(
     teamId: teamIdFromName(i.team?.name),
     teamName: i.team?.name ?? "",
     player: i.player?.name ?? "?",
+    photo: i.player?.photo ?? null,
     reason: i.player?.reason ?? "",
     type: i.player?.type ?? "",
   }));

@@ -2,6 +2,7 @@
 
 import type { Team } from "@/types";
 import { getTeam } from "@/lib/data/teams";
+import { PlayerAvatar, initialsOf } from "@/components/PlayerAvatar";
 import type { MatchPreview as Preview } from "@/lib/providers";
 
 interface Props {
@@ -141,7 +142,7 @@ function FormBlock({
   return (
     <div className="bg-surface border border-border rounded-2xl p-5">
       <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-3">
-        Forma reciente
+        Partidos anteriores
       </div>
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-3">
@@ -220,6 +221,40 @@ function H2H({
   );
 }
 
+// "Missing Fixture" = baja segura; "Questionable" = duda.
+function injuryTag(type: string): { label: string; cls: string } {
+  if (/quest/i.test(type))
+    return { label: "Duda", cls: "bg-amber-500/15 text-amber-500" };
+  return { label: "Baja", cls: "bg-pink/15 text-pink" };
+}
+
+function InjuryRow({ item }: { item: Preview["injuries"][number] }) {
+  const tag = injuryTag(item.type);
+  return (
+    <li className="flex items-center gap-3">
+      <PlayerAvatar
+        photo={item.photo}
+        fallback={initialsOf(item.player)}
+        size={36}
+        alt={item.player}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium truncate">{item.player}</div>
+        {item.reason && (
+          <div className="text-xs text-muted-foreground truncate">
+            {item.reason}
+          </div>
+        )}
+      </div>
+      <span
+        className={`shrink-0 text-[10px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 ${tag.cls}`}
+      >
+        {tag.label}
+      </span>
+    </li>
+  );
+}
+
 function Injuries({
   injuries,
   homeId,
@@ -247,32 +282,25 @@ function Injuries({
         Bajas y dudas
       </div>
       {groups.length > 0 ? (
-        <div className="grid sm:grid-cols-2 gap-4">
+        <div className="grid sm:grid-cols-2 gap-x-6 gap-y-4">
           {groups.map((g, i) => (
             <div key={i}>
-              <p className="text-sm font-semibold tracking-tight mb-1.5 flex items-center gap-1.5">
+              <p className="text-sm font-semibold tracking-tight mb-2 flex items-center gap-1.5">
                 <span aria-hidden>{g.team?.flag}</span>
                 {g.team?.name ?? "—"}
               </p>
-              <ul className="space-y-1">
+              <ul className="space-y-2.5">
                 {g.list.map((p, j) => (
-                  <li key={j} className="text-xs text-muted-foreground">
-                    <span className="text-foreground font-medium">{p.player}</span>
-                    {p.reason ? ` · ${p.reason}` : ""}
-                  </li>
+                  <InjuryRow key={j} item={p} />
                 ))}
               </ul>
             </div>
           ))}
         </div>
       ) : (
-        <ul className="space-y-1">
+        <ul className="space-y-2.5">
           {flat.map((p, j) => (
-            <li key={j} className="text-xs text-muted-foreground">
-              <span className="text-foreground font-medium">{p.player}</span>
-              {p.teamName ? ` (${p.teamName})` : ""}
-              {p.reason ? ` · ${p.reason}` : ""}
-            </li>
+            <InjuryRow key={j} item={p} />
           ))}
         </ul>
       )}
