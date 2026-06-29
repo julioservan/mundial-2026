@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/matches", label: "Partidos" },
   { href: "/groups", label: "Grupos" },
   { href: "/eliminatoria", label: "Eliminatoria" },
+  { href: "/simulador", label: "Simulador" },
   { href: "/goleadores", label: "Goleadores" },
   { href: "/predictions", label: "Predicciones" },
   { href: "/leaderboard", label: "Ranking" },
