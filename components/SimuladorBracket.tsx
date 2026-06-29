@@ -443,7 +443,20 @@ export function SimuladorBracket() {
               </g>
             </g>
           ) : (
-            <TrophyMark />
+            <>
+              {/* Respaldo dibujado: se ve si todavía no hay imagen en /trofeo.png */}
+              <TrophyMark />
+              {/* Imagen propia opcional: añade public/trofeo.png al repo y aparece
+                  encima. Si no existe, no se renderiza nada y queda el dibujo. */}
+              <image
+                href="/trofeo.png"
+                x={CX - 78}
+                y={CY - 92}
+                width={156}
+                height={184}
+                preserveAspectRatio="xMidYMid meet"
+              />
+            </>
           )}
         </svg>
       </div>
