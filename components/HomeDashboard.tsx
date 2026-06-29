@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import type { Match } from "@/types";
 import { MATCHES } from "@/lib/data/matches";
 import { getTeam } from "@/lib/data/teams";
 import { LocalTime } from "@/components/LocalTime";
@@ -10,12 +11,12 @@ import { useAuth } from "@/lib/supabase/auth";
 import { getSupabase } from "@/lib/supabase/client";
 import { deviceTimezone } from "@/lib/timezones";
 import { fetchResults, type ResultMap } from "@/lib/results";
+import { fetchFixtures, type FixtureSnapshot } from "@/lib/fixtures";
 import { fetchLeaderboard, type LiveLeaderboardEntry } from "@/lib/leaderboard";
 import type { Pick } from "@/lib/scoring";
 
 // Ventana en la que consideramos un partido "en juego" desde su inicio.
 const LIVE_MS = 135 * 60 * 1000; // 2h15m
-const PLAYABLE = MATCHES.filter((m) => m.homeTeamId && m.awayTeamId);
 const MEDAL = ["text-accent", "text-cyan", "text-pink"];
 
 interface PlayerLite {
@@ -31,9 +32,7 @@ export function HomeDashboard() {
   const [board, setBoard] = useState<LiveLeaderboardEntry[]>([]);
   const [picksByMatch, setPicksByMatch] = useState<PicksByMatch>({});
   const [players, setPlayers] = useState<Record<string, PlayerLite>>({});
-  const [liveScores, setLiveScores] = useState<
-    Record<string, { home: number; away: number; live: boolean; finished: boolean }>
-  >({});
+  const [fixtures, setFixtures] = useState<Record<string, FixtureSnapshot>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -41,24 +40,14 @@ export function HomeDashboard() {
     return () => clearInterval(t);
   }, []);
 
-  // Marcadores en vivo desde la API (se refresca cada 30 s).
+  // Snapshot de partidos (equipos reales de eliminatoria + marcador en vivo),
+  // refrescado cada 30 s desde el feed sincronizado.
   useEffect(() => {
     let active = true;
-    async function loadLive() {
-      try {
-        const res = await fetch("/api/live");
-        const data = await res.json();
-        if (!active) return;
-        const map: Record<
-          string,
-          { home: number; away: number; live: boolean; finished: boolean }
-        > = {};
-        for (const m of data.matches ?? []) map[m.matchId] = m;
-        setLiveScores(map);
-      } catch {
-        // sin datos en vivo, el panel sigue funcionando
-      }
-    }
+    const loadLive = () =>
+      fetchFixtures()
+        .then((f) => active && setFixtures(f))
+        .catch(() => {});
     void loadLive();
     const t = setInterval(loadLive, 30_000);
     return () => {
@@ -113,12 +102,63 @@ export function HomeDashboard() {
     };
   }, []);
 
+  // Rellena equipos y kickoff reales de eliminatoria desde el feed.
+  const enriched = useMemo<Match[]>(
+    () =>
+      MATCHES.map((m) => {
+        if (m.stage === "group") return m;
+        const fx = fixtures[m.id];
+        if (!fx) return m;
+        return {
+          ...m,
+          homeTeamId: fx.homeTeamId ?? m.homeTeamId,
+          awayTeamId: fx.awayTeamId ?? m.awayTeamId,
+          kickoff: fx.kickoff ?? m.kickoff,
+        };
+      }),
+    [fixtures],
+  );
+  const matchById = useMemo(() => {
+    const map: Record<string, Match> = {};
+    for (const m of enriched) map[m.id] = m;
+    return map;
+  }, [enriched]);
+
+  // Marcador (en vivo o final) derivado del feed.
+  const liveScores = useMemo(() => {
+    const map: Record<
+      string,
+      { home: number; away: number; live: boolean; finished: boolean }
+    > = {};
+    for (const [id, fx] of Object.entries(fixtures)) {
+      if (fx.homeScore == null || fx.awayScore == null) continue;
+      if (fx.status === "live" || fx.status === "finished") {
+        map[id] = {
+          home: fx.homeScore,
+          away: fx.awayScore,
+          live: fx.status === "live",
+          finished: fx.status === "finished",
+        };
+      }
+    }
+    return map;
+  }, [fixtures]);
+
   const isFinished = (id: string) => {
     const r = results[id];
-    return Boolean(r && r.home !== "" && r.away !== "");
+    return (
+      Boolean(r && r.home !== "" && r.away !== "") ||
+      fixtures[id]?.status === "finished"
+    );
   };
 
-  const live = PLAYABLE.filter((m) => {
+  // Partidos con equipos definidos (grupos siempre; eliminatoria cuando el
+  // feed ya ha asignado los rivales).
+  const playable = enriched.filter((m) => m.homeTeamId && m.awayTeamId);
+
+  // En juego: marcado "live" por el feed, o dentro de la ventana de inicio.
+  const live = playable.filter((m) => {
+    if (fixtures[m.id]?.status === "live") return true;
     const k = Date.parse(m.kickoff);
     return now >= k && now < k + LIVE_MS && !isFinished(m.id);
   });
@@ -133,9 +173,10 @@ export function HomeDashboard() {
       day: "2-digit",
     }).format(new Date(iso));
 
-  const allUpcoming = PLAYABLE.filter((m) => Date.parse(m.kickoff) > now).sort(
-    (a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff),
-  );
+  const liveIds = new Set(live.map((m) => m.id));
+  const allUpcoming = playable
+    .filter((m) => !liveIds.has(m.id) && !isFinished(m.id) && Date.parse(m.kickoff) > now)
+    .sort((a, b) => Date.parse(a.kickoff) - Date.parse(b.kickoff));
   const nextDay = allUpcoming.length > 0 ? dayOf(allUpcoming[0].kickoff) : null;
   const nextOfDay = nextDay
     ? allUpcoming.filter((m) => dayOf(m.kickoff) === nextDay)
@@ -145,10 +186,12 @@ export function HomeDashboard() {
   const top = board.slice(0, 5);
 
   function renderMatch(matchId: string, isLive: boolean) {
+    const match = matchById[matchId];
+    if (!match) return null;
     return (
       <MatchRow
         key={matchId}
-        matchId={matchId}
+        match={match}
         live={isLive}
         score={liveScores[matchId]}
         entries={picksByMatch[matchId] ?? []}
@@ -287,19 +330,19 @@ export function HomeDashboard() {
 }
 
 function MatchRow({
-  matchId,
+  match,
   live,
   score,
   entries,
   players,
 }: {
-  matchId: string;
+  match: Match;
   live?: boolean;
   score?: { home: number; away: number; live: boolean; finished: boolean };
   entries: { userId: string; pick: Pick }[];
   players: Record<string, PlayerLite>;
 }) {
-  const match = MATCHES.find((m) => m.id === matchId)!;
+  const matchId = match.id;
   const home = getTeam(match.homeTeamId);
   const away = getTeam(match.awayTeamId);
 

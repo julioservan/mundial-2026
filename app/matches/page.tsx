@@ -1,5 +1,4 @@
 import { MatchesView } from "@/components/MatchesView";
-import { MATCHES } from "@/lib/data/matches";
 
 export const metadata = {
   title: "Calendario de partidos · Mundialistas2026",
@@ -20,7 +19,7 @@ export default function MatchesPage() {
           104 partidos repartidos en 16 ciudades de USA, Canadá y México.
         </p>
       </header>
-      <MatchesView matches={MATCHES} />
+      <MatchesView />
     </div>
   );
 }
