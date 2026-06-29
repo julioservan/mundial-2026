@@ -15,7 +15,10 @@ import { provider, type ProviderFixture } from "@/lib/providers";
 import { KNOCKOUT_SLOTS, groupMatchByPair } from "@/lib/data/matches";
 import { getTeam } from "@/lib/data/teams";
 
-const DAILY_CAP = Number(process.env.APIFOOTBALL_DAILY_CAP ?? 95);
+// Tope diario de peticiones a la API (red de seguridad sobre la cuota del plan).
+// Plan Pro de API-Football ≈ 7500/día; dejamos margen. El plan Free es ~100/día:
+// si vuelves a Free, baja esto con APIFOOTBALL_DAILY_CAP.
+const DAILY_CAP = Number(process.env.APIFOOTBALL_DAILY_CAP ?? 7000);
 // Recarga completa: con plan Pro hay cuota de sobra, así que sincronizamos a
 // menudo (cada 2 min). La recarga completa mapea bien TODO (grupos y
 // eliminatorias) y trae el marcador en directo de los partidos en juego.
