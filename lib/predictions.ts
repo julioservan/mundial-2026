@@ -152,6 +152,18 @@ export async function deleteAllRemote(userId: string) {
   if (error) throw error;
 }
 
+// Borra solo los pronósticos indicados (p. ej. los de partidos sin empezar);
+// los de partidos ya jugados se conservan porque quedan registrados.
+export async function deleteManyRemote(userId: string, matchIds: string[]) {
+  if (matchIds.length === 0) return;
+  const { error } = await getSupabase()
+    .from("mundial_predictions")
+    .delete()
+    .eq("user_id", userId)
+    .in("match_id", matchIds);
+  if (error) throw error;
+}
+
 // Sube a la base los pronósticos que el usuario tuviera en local (sin cuenta).
 export async function migrateLocalToRemote(userId: string, local: PredMap) {
   const rows = Object.entries(local).map(([matchId, e]) => toRow(userId, matchId, e));
