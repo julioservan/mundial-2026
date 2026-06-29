@@ -77,8 +77,9 @@ export function MatchesView() {
 
   function liveScore(id: string) {
     const fx = fixtures[id];
-    if (fx?.status === "live" && fx.homeScore != null && fx.awayScore != null) {
-      return { home: fx.homeScore, away: fx.awayScore };
+    // En juego: mostramos el marcador siempre (0-0 si aún no hay goles).
+    if (fx?.status === "live") {
+      return { home: fx.homeScore ?? 0, away: fx.awayScore ?? 0 };
     }
     return null;
   }

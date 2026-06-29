@@ -132,13 +132,24 @@ export function HomeDashboard() {
       { home: number; away: number; live: boolean; finished: boolean }
     > = {};
     for (const [id, fx] of Object.entries(fixtures)) {
-      if (fx.homeScore == null || fx.awayScore == null) continue;
-      if (fx.status === "live" || fx.status === "finished") {
+      if (fx.status === "live") {
+        // En juego: mostramos siempre el marcador (0-0 si aún no hay goles).
+        map[id] = {
+          home: fx.homeScore ?? 0,
+          away: fx.awayScore ?? 0,
+          live: true,
+          finished: false,
+        };
+      } else if (
+        fx.status === "finished" &&
+        fx.homeScore != null &&
+        fx.awayScore != null
+      ) {
         map[id] = {
           home: fx.homeScore,
           away: fx.awayScore,
-          live: fx.status === "live",
-          finished: fx.status === "finished",
+          live: false,
+          finished: true,
         };
       }
     }
