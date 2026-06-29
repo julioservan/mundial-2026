@@ -69,7 +69,19 @@ export async function GET(
     try {
       const r = await provider.fetchFixtureDetail(externalId);
       if (r.errors.length === 0) {
-        detail = r.data;
+        // La previa (pronóstico, forma, H2H, bajas) solo tiene sentido antes de
+        // que empiece; si ya está en vivo o terminado, conservamos la cacheada.
+        let preview =
+          (cached?.data as MatchDetail | undefined)?.preview ?? null;
+        if (status === "scheduled") {
+          try {
+            const pv = await provider.fetchMatchPreview(externalId);
+            if (pv.errors.length === 0) preview = pv.data;
+          } catch {
+            // la previa es opcional; si falla, seguimos con el detalle
+          }
+        }
+        detail = { ...r.data, preview };
         await supabase.from("mundial_match_detail").upsert(
           { match_id: id, data: detail, updated_at: new Date().toISOString() },
           { onConflict: "match_id" },
@@ -92,6 +104,7 @@ export async function GET(
       home: fix?.home_score ?? null,
       away: fix?.away_score ?? null,
       detail: detail ?? null,
+      preview: detail?.preview ?? null,
       homeScorers: sc.home,
       awayScorers: sc.away,
     },

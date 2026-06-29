@@ -11,6 +11,11 @@ import { teamIdFromName } from "@/lib/data/team-aliases";
 import type {
   LeagueSeason,
   MatchDetail,
+  MatchPreview,
+  PreviewPrediction,
+  PreviewForm,
+  H2HMatch,
+  InjuryItem,
   ProviderCall,
   ProviderFixture,
   RateLimit,
@@ -213,6 +218,23 @@ export const apiFootball: ResultsProvider = {
     };
   },
 
+  async fetchMatchPreview(externalId): Promise<ProviderCall<MatchPreview>> {
+    // /predictions ya trae probabilidades, forma reciente y el cara a cara;
+    // /injuries trae lesionados/sancionados. Solo 2 peticiones.
+    const [pred, inj] = await Promise.all([
+      get<ApiPrediction>(`/predictions?fixture=${externalId}`),
+      get<ApiInjury>(`/injuries?fixture=${externalId}`),
+    ]);
+    const errors = [...pred.errors, ...inj.errors];
+    const data = mapPreview(pred.response[0], inj.response);
+    return {
+      data,
+      requests: 2,
+      errors,
+      rateLimit: pred.rateLimit ?? inj.rateLimit,
+    };
+  },
+
   async fetchTopScorers(ls): Promise<ProviderCall<TopScorer[]>> {
     const { response, errors, rateLimit } = await get<ApiScorer>(
       `/players/topscorers?league=${ls.leagueId}&season=${ls.season}`,
@@ -309,4 +331,81 @@ function mapStat(s: ApiStat): TeamStat {
     teamName: s.team.name,
     stats: (s.statistics ?? []).map((x) => ({ type: x.type, value: x.value })),
   };
+}
+
+// --- Previa: tipos crudos y mapeo ------------------------------------------
+
+interface ApiPrediction {
+  predictions?: {
+    winner?: { name: string | null; comment: string | null } | null;
+    advice?: string | null;
+    percent?: { home?: string; draw?: string; away?: string };
+  };
+  teams?: {
+    home?: { name: string; league?: { form?: string | null } };
+    away?: { name: string; league?: { form?: string | null } };
+  };
+  h2h?: {
+    fixture?: { date?: string };
+    teams?: { home?: { name?: string }; away?: { name?: string } };
+    goals?: { home?: number | null; away?: number | null };
+  }[];
+}
+
+interface ApiInjury {
+  player?: { name?: string; type?: string; reason?: string };
+  team?: { name?: string };
+}
+
+function pctNum(s: string | null | undefined): number {
+  if (!s) return 0;
+  const n = Number(String(s).replace("%", "").trim());
+  return Number.isNaN(n) ? 0 : n;
+}
+
+function mapPreview(
+  p: ApiPrediction | undefined,
+  injuries: ApiInjury[],
+): MatchPreview {
+  const prediction: PreviewPrediction | null = p?.predictions
+    ? {
+        homePct: pctNum(p.predictions.percent?.home),
+        drawPct: pctNum(p.predictions.percent?.draw),
+        awayPct: pctNum(p.predictions.percent?.away),
+        advice: p.predictions.advice ?? null,
+        winnerName: p.predictions.winner?.name ?? null,
+        winnerComment: p.predictions.winner?.comment ?? null,
+      }
+    : null;
+
+  const form: PreviewForm | null = p?.teams
+    ? {
+        home: (p.teams.home?.league?.form ?? "").slice(-5),
+        away: (p.teams.away?.league?.form ?? "").slice(-5),
+      }
+    : null;
+
+  // Más recientes primero; como mucho 6 enfrentamientos.
+  const h2h: H2HMatch[] = (p?.h2h ?? [])
+    .slice(-6)
+    .reverse()
+    .map((m) => ({
+      date: m.fixture?.date ?? "",
+      homeName: m.teams?.home?.name ?? "",
+      awayName: m.teams?.away?.name ?? "",
+      homeTeamId: teamIdFromName(m.teams?.home?.name),
+      awayTeamId: teamIdFromName(m.teams?.away?.name),
+      homeScore: m.goals?.home ?? null,
+      awayScore: m.goals?.away ?? null,
+    }));
+
+  const items: InjuryItem[] = (injuries ?? []).map((i) => ({
+    teamId: teamIdFromName(i.team?.name),
+    teamName: i.team?.name ?? "",
+    player: i.player?.name ?? "?",
+    reason: i.player?.reason ?? "",
+    type: i.player?.type ?? "",
+  }));
+
+  return { prediction, form, h2h, injuries: items };
 }
