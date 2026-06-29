@@ -289,6 +289,7 @@ interface ApiLineup {
   substitutes: { player: ApiLineupPlayer }[];
 }
 interface ApiLineupPlayer {
+  id: number | null;
   name: string;
   number: number | null;
   pos: string | null;
@@ -297,7 +298,7 @@ interface ApiLineupPlayer {
 interface ApiEvent {
   time: { elapsed: number | null; extra: number | null };
   team: { name: string };
-  player: { name: string | null };
+  player: { id: number | null; name: string | null };
   assist: { name: string | null };
   type: string;
   detail: string;
@@ -309,6 +310,7 @@ interface ApiStat {
 
 function mapLineup(l: ApiLineup): TeamLineup {
   const player = (p: ApiLineupPlayer) => ({
+    id: p.id ?? null,
     name: p.name,
     number: p.number ?? null,
     pos: p.pos ?? null,
@@ -331,6 +333,7 @@ function mapEvent(e: ApiEvent): MatchEvent {
     teamId: teamIdFromName(e.team.name),
     teamName: e.team.name,
     player: e.player?.name ?? null,
+    playerId: e.player?.id ?? null,
     assist: e.assist?.name ?? null,
     type: e.type,
     detail: e.detail,
@@ -350,7 +353,7 @@ function mapStat(s: ApiStat): TeamStat {
 interface ApiPlayers {
   team: { name: string };
   players: {
-    player: { name: string; photo: string | null };
+    player: { id: number | null; name: string; photo: string | null };
     statistics: {
       games?: { minutes?: number | null; rating?: string | null };
       goals?: { total?: number | null; assists?: number | null };
@@ -368,6 +371,7 @@ function mapPlayers(t: ApiPlayers): PlayerRating[] {
     // Solo jugadores que disputaron minutos y tienen valoración.
     if (!minutes || Number.isNaN(rating) || rating <= 0) continue;
     out.push({
+      id: p.player.id ?? null,
       name: p.player.name,
       photo: p.player.photo ?? null,
       teamId,

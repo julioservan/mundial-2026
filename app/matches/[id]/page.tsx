@@ -148,10 +148,10 @@ export default function MatchDetailPage() {
     };
   }, [id, fetchLive]);
 
-  // Mientras el partido esté en vivo, refresca marcador y cronología cada 45 s.
+  // Mientras el partido esté en vivo, refresca marcador y cronología cada 30 s.
   useEffect(() => {
     if (info?.status !== "live") return;
-    const t = setInterval(() => void fetchLive(), 45_000);
+    const t = setInterval(() => void fetchLive(), 30_000);
     return () => clearInterval(t);
   }, [info?.status, fetchLive]);
 
@@ -178,6 +178,13 @@ export default function MatchDetailPage() {
   const finished = Boolean(result && result.home !== "" && result.away !== "");
   const isLive = info?.status === "live";
   const hasLiveScore = info != null && info.home != null && info.away != null;
+  // Minuto aproximado en vivo: el del último evento (gol/tarjeta/cambio).
+  const liveMinute = isLive
+    ? (detail?.events ?? []).reduce(
+        (m, e) => Math.max(m, e.minute + (e.extra ?? 0)),
+        0,
+      )
+    : 0;
   const byPick = (p: Pick) => picks.filter((e) => e.pick === p);
 
   // Partido con los equipos y la hora reales (eliminatoria una vez asignada).
@@ -218,7 +225,7 @@ export default function MatchDetailPage() {
         {isLive && (
           <div className="text-center mb-3">
             <span className="inline-flex items-center gap-1.5 text-xs font-bold text-pink animate-pulse">
-              ● EN VIVO
+              ● EN VIVO{liveMinute > 0 ? ` · ${liveMinute}'` : ""}
             </span>
           </div>
         )}

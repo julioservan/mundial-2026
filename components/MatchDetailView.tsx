@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { Team } from "@/types";
 import { getTeam } from "@/lib/data/teams";
 import type {
@@ -19,6 +20,64 @@ interface Props {
   away?: Team;
 }
 
+// Mapa id de jugador -> foto, a partir de las valoraciones (que sí traen foto).
+type PhotoMap = Record<number, string>;
+function buildPhotoMap(players: PlayerRating[]): PhotoMap {
+  const map: PhotoMap = {};
+  for (const p of players) {
+    if (p.id != null && p.photo) map[p.id] = p.photo;
+  }
+  return map;
+}
+
+function initialsOf(name: string): string {
+  return name
+    .split(" ")
+    .map((w) => w[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
+// Foto de jugador con fallback (a un texto: dorsal o iniciales).
+function PlayerAvatar({
+  photo,
+  fallback,
+  size = 28,
+  alt,
+}: {
+  photo?: string | null;
+  fallback: string;
+  size?: number;
+  alt?: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  const style = { width: size, height: size };
+  if (!photo || failed) {
+    return (
+      <span
+        style={style}
+        className="rounded-full bg-surface-muted shrink-0 flex items-center justify-center text-[10px] font-bold text-muted-foreground tabular-nums"
+      >
+        {fallback}
+      </span>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={photo}
+      alt={alt ?? ""}
+      style={style}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+      className="rounded-full object-cover bg-surface-muted shrink-0"
+    />
+  );
+}
+
 // Icono según el tipo de evento.
 function eventIcon(e: MatchEvent): string {
   const t = e.type.toLowerCase();
@@ -36,9 +95,11 @@ function minuteLabel(e: MatchEvent): string {
 function Timeline({
   events,
   homeId,
+  photos,
 }: {
   events: MatchEvent[];
   homeId: string | null;
+  photos: PhotoMap;
 }) {
   if (events.length === 0) return null;
   const sorted = [...events].sort(
@@ -50,6 +111,7 @@ function Timeline({
       <ol className="space-y-2">
         {sorted.map((e, i) => {
           const isHome = e.teamId != null && e.teamId === homeId;
+          const photo = e.playerId != null ? photos[e.playerId] : null;
           return (
             <li
               key={i}
@@ -60,6 +122,12 @@ function Timeline({
               <span className="font-mono text-xs text-muted-foreground tabular-nums w-10 shrink-0">
                 {minuteLabel(e)}
               </span>
+              <PlayerAvatar
+                photo={photo}
+                fallback={e.player ? initialsOf(e.player) : "?"}
+                size={26}
+                alt={e.player ?? ""}
+              />
               <span className="text-lg shrink-0" aria-hidden>
                 {eventIcon(e)}
               </span>
@@ -103,7 +171,15 @@ function rowsFromGrid(players: LineupPlayer[]): LineupPlayer[][] {
   return [...byRow.keys()].sort((a, b) => a - b).map((r) => byRow.get(r)!);
 }
 
-function Pitch({ lineup, team }: { lineup: TeamLineup; team?: Team }) {
+function Pitch({
+  lineup,
+  team,
+  photos,
+}: {
+  lineup: TeamLineup;
+  team?: Team;
+  photos: PhotoMap;
+}) {
   const hasGrid = lineup.startXI.some((p) => p.grid);
   const rows = hasGrid ? rowsFromGrid(lineup.startXI) : [lineup.startXI];
   // Portero (fila 1) abajo: invertimos para que el ataque quede arriba.
@@ -125,16 +201,25 @@ function Pitch({ lineup, team }: { lineup: TeamLineup; team?: Team }) {
       <div className="bg-gradient-to-b from-emerald-900/30 to-emerald-950/20 p-3 space-y-3">
         {display.map((row, ri) => (
           <div key={ri} className="flex justify-around gap-1">
-            {row.map((p, pi) => (
-              <div key={pi} className="flex flex-col items-center w-16 text-center">
-                <span className="w-7 h-7 rounded-full bg-background/80 border border-border flex items-center justify-center text-xs font-bold tabular-nums">
-                  {p.number ?? "–"}
-                </span>
-                <span className="text-[10px] leading-tight mt-1 truncate w-full">
-                  {p.name.split(" ").slice(-1)[0]}
-                </span>
-              </div>
-            ))}
+            {row.map((p, pi) => {
+              const photo = p.id != null ? photos[p.id] : null;
+              return (
+                <div
+                  key={pi}
+                  className="flex flex-col items-center w-16 text-center"
+                >
+                  <PlayerAvatar
+                    photo={photo}
+                    fallback={p.number != null ? String(p.number) : "–"}
+                    size={32}
+                    alt={p.name}
+                  />
+                  <span className="text-[10px] leading-tight mt-1 truncate w-full">
+                    {p.name.split(" ").slice(-1)[0]}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         ))}
       </div>
@@ -162,11 +247,13 @@ function Lineups({
   homeId,
   home,
   away,
+  photos,
 }: {
   lineups: TeamLineup[];
   homeId: string | null;
   home?: Team;
   away?: Team;
+  photos: PhotoMap;
 }) {
   if (lineups.length === 0) return null;
   // Ordena: local primero.
@@ -176,7 +263,12 @@ function Lineups({
       <h2 className="text-xl font-bold tracking-tight mb-4">Alineaciones</h2>
       <div className="grid sm:grid-cols-2 gap-4">
         {ordered.map((l, i) => (
-          <Pitch key={i} lineup={l} team={l.teamId === homeId ? home : away} />
+          <Pitch
+            key={i}
+            lineup={l}
+            team={l.teamId === homeId ? home : away}
+            photos={photos}
+          />
         ))}
       </div>
     </section>
@@ -327,6 +419,7 @@ function Ratings({ players }: { players: PlayerRating[] }) {
 
 export function MatchDetailView({ detail, homeId, home, away }: Props) {
   const players = detail.players ?? [];
+  const photos = buildPhotoMap(players);
   const hasContent =
     detail.events.length > 0 ||
     detail.lineups.length > 0 ||
@@ -336,9 +429,15 @@ export function MatchDetailView({ detail, homeId, home, away }: Props) {
 
   return (
     <div>
-      <Timeline events={detail.events} homeId={homeId} />
+      <Timeline events={detail.events} homeId={homeId} photos={photos} />
       <Ratings players={players} />
-      <Lineups lineups={detail.lineups} homeId={homeId} home={home} away={away} />
+      <Lineups
+        lineups={detail.lineups}
+        homeId={homeId}
+        home={home}
+        away={away}
+        photos={photos}
+      />
       <Stats statistics={detail.statistics} homeId={homeId} />
     </div>
   );
