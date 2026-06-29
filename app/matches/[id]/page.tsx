@@ -14,6 +14,7 @@ import { stageLabel } from "@/lib/utils/format";
 import { MatchDetailView } from "@/components/MatchDetailView";
 import { MatchPreview } from "@/components/MatchPreview";
 import { MatchPrediction } from "@/components/MatchPrediction";
+import { PlayerAvatar, initialsOf } from "@/components/PlayerAvatar";
 import type { MatchDetail, MatchEvent } from "@/lib/providers";
 import type { Pick } from "@/lib/scoring";
 
@@ -27,10 +28,6 @@ export default function MatchDetailPage() {
   const [picks, setPicks] = useState<{ userId: string; pick: Pick }[]>([]);
   const [players, setPlayers] = useState<Record<string, PlayerLite>>({});
   const [result, setResult] = useState<{ home: string; away: string } | null>(null);
-  const [scorers, setScorers] = useState<{ home: string[]; away: string[] }>({
-    home: [],
-    away: [],
-  });
   const [detail, setDetail] = useState<MatchDetail | null>(null);
   const [info, setInfo] = useState<{
     status?: string;
@@ -77,7 +74,6 @@ export default function MatchDetailPage() {
         homeTeamId: mi.homeTeamId,
         awayTeamId: mi.awayTeamId,
       });
-      setScorers({ home: mi.homeScorers ?? [], away: mi.awayScorers ?? [] });
       setDetail(mi.detail ?? null);
 
       // Aviso de gol: si aparece un gol nuevo mientras el partido está en vivo.
@@ -187,6 +183,17 @@ export default function MatchDetailPage() {
     : 0;
   const byPick = (p: Pick) => picks.filter((e) => e.pick === p);
 
+  // Goleadores derivados de los eventos, con foto (vía valoraciones de jugadores).
+  const photoById: Record<number, string> = {};
+  for (const p of detail?.players ?? []) {
+    if (p.id != null && p.photo) photoById[p.id] = p.photo;
+  }
+  const goalEvents = (detail?.events ?? []).filter(
+    (e) => e.type.toLowerCase() === "goal" && e.detail !== "Missed Penalty",
+  );
+  const homeGoals = goalEvents.filter((e) => e.teamId === homeTeamId);
+  const awayGoals = goalEvents.filter((e) => e.teamId === awayTeamId);
+
   // Partido con los equipos y la hora reales (eliminatoria una vez asignada).
   const enrichedMatch = { ...match, homeTeamId, awayTeamId, kickoff };
   // Cerrado para pronosticar si ya empezó/terminó o aún no hay rivales.
@@ -261,21 +268,37 @@ export default function MatchDetailPage() {
           </div>
         </div>
 
-        {(scorers.home.length > 0 || scorers.away.length > 0) && (
-          <div className="mt-5 pt-4 border-t border-border/60 grid grid-cols-2 gap-4 text-base">
-            <div className="space-y-1.5">
-              {scorers.home.map((g, i) => (
+        {(homeGoals.length > 0 || awayGoals.length > 0) && (
+          <div className="mt-5 pt-4 border-t border-border/60 grid grid-cols-2 gap-4 text-sm">
+            <div className="space-y-2">
+              {homeGoals.map((g, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <span aria-hidden>⚽</span>
-                  <span className="truncate font-medium">{g}</span>
+                  <PlayerAvatar
+                    photo={g.playerId != null ? photoById[g.playerId] : null}
+                    fallback={g.player ? initialsOf(g.player) : "⚽"}
+                    size={24}
+                    alt={g.player ?? ""}
+                  />
+                  <span className="truncate font-medium">{g.player ?? "—"}</span>
+                  <span className="text-xs text-muted-foreground font-mono shrink-0">
+                    {g.minute}&apos;
+                  </span>
                 </div>
               ))}
             </div>
-            <div className="space-y-1.5 text-right">
-              {scorers.away.map((g, i) => (
-                <div key={i} className="flex items-center gap-2 justify-end">
-                  <span className="truncate font-medium">{g}</span>
-                  <span aria-hidden>⚽</span>
+            <div className="space-y-2">
+              {awayGoals.map((g, i) => (
+                <div key={i} className="flex items-center gap-2 flex-row-reverse">
+                  <PlayerAvatar
+                    photo={g.playerId != null ? photoById[g.playerId] : null}
+                    fallback={g.player ? initialsOf(g.player) : "⚽"}
+                    size={24}
+                    alt={g.player ?? ""}
+                  />
+                  <span className="truncate font-medium">{g.player ?? "—"}</span>
+                  <span className="text-xs text-muted-foreground font-mono shrink-0">
+                    {g.minute}&apos;
+                  </span>
                 </div>
               ))}
             </div>

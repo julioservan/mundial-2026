@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import type { Team } from "@/types";
 import { getTeam } from "@/lib/data/teams";
+import { PlayerAvatar, initialsOf } from "@/components/PlayerAvatar";
 import type {
   MatchDetail,
   TeamLineup,
@@ -28,54 +28,6 @@ function buildPhotoMap(players: PlayerRating[]): PhotoMap {
     if (p.id != null && p.photo) map[p.id] = p.photo;
   }
   return map;
-}
-
-function initialsOf(name: string): string {
-  return name
-    .split(" ")
-    .map((w) => w[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
-
-// Foto de jugador con fallback (a un texto: dorsal o iniciales).
-function PlayerAvatar({
-  photo,
-  fallback,
-  size = 28,
-  alt,
-}: {
-  photo?: string | null;
-  fallback: string;
-  size?: number;
-  alt?: string;
-}) {
-  const [failed, setFailed] = useState(false);
-  const style = { width: size, height: size };
-  if (!photo || failed) {
-    return (
-      <span
-        style={style}
-        className="rounded-full bg-surface-muted shrink-0 flex items-center justify-center text-[10px] font-bold text-muted-foreground tabular-nums"
-      >
-        {fallback}
-      </span>
-    );
-  }
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={photo}
-      alt={alt ?? ""}
-      style={style}
-      loading="lazy"
-      referrerPolicy="no-referrer"
-      onError={() => setFailed(true)}
-      className="rounded-full object-cover bg-surface-muted shrink-0"
-    />
-  );
 }
 
 // Icono según el tipo de evento.
