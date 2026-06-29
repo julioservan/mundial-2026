@@ -54,8 +54,9 @@ function Timeline({
   photos: PhotoMap;
 }) {
   if (events.length === 0) return null;
+  // Más reciente arriba (de más nuevo a más antiguo).
   const sorted = [...events].sort(
-    (a, b) => a.minute - b.minute || (a.extra ?? 0) - (b.extra ?? 0),
+    (a, b) => b.minute - a.minute || (b.extra ?? 0) - (a.extra ?? 0),
   );
   return (
     <section className="mb-8">
