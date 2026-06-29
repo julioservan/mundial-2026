@@ -34,6 +34,10 @@ export interface Venue {
   city: string;
   country: "USA" | "CAN" | "MEX";
   stadium: string;
+  // Zona horaria IANA de la sede (para mostrar la hora local del estadio).
+  tz: string;
+  // Código corto de ciudad (p. ej. "NYC", "CDMX").
+  short: string;
 }
 
 export type MatchStage =
