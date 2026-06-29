@@ -6,6 +6,7 @@ import type { Match } from "@/types";
 import { MATCHES } from "@/lib/data/matches";
 import { getTeam } from "@/lib/data/teams";
 import { LocalTime } from "@/components/LocalTime";
+import { formatMatchTime } from "@/lib/utils/format";
 import { Avatar } from "@/components/Avatar";
 import { useAuth } from "@/lib/supabase/auth";
 import { getSupabase } from "@/lib/supabase/client";
@@ -407,6 +408,17 @@ function MatchRow({
           <span className="truncate">{away?.name}</span>
         </div>
         </div>
+
+        {/* Sede: estadio + hora local del estadio + ciudad corta */}
+        {!score && (
+          <div className="mt-2 text-[11px] text-muted-foreground flex items-center justify-center gap-1.5">
+            <span className="truncate">🏟 {match.venue.stadium}</span>
+            <span aria-hidden>·</span>
+            <span className="font-mono whitespace-nowrap">
+              {formatMatchTime(match.kickoff, match.venue.tz)} {match.venue.short}
+            </span>
+          </div>
+        )}
 
       {/* Pronósticos de la gente para este partido */}
       <div className="mt-3 pt-3 border-t border-border/60">
