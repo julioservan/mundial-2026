@@ -47,6 +47,27 @@ const R_SF = 98; // 2 finalistas
 const FLAG_LEAF = 27;
 const FLAG_WIN = 20;
 const FLAG_CHAMP = 34;
+// Trofeo central (~10% más pequeño que antes).
+const TROPHY_W = 140;
+const TROPHY_H = 166;
+
+// Confetti determinista (sin Math.random para no romper la pureza de render).
+const CONFETTI_COLORS = [
+  "var(--accent)",
+  "var(--pink)",
+  "var(--cyan)",
+  "var(--amber)",
+  "var(--violet)",
+  "#ffffff",
+];
+const CONFETTI = Array.from({ length: 54 }, (_, i) => ({
+  left: (i * 37) % 100,
+  delay: ((i * 53) % 130) / 100, // 0–1.3s
+  duration: 2.6 + ((i * 29) % 16) / 10, // 2.6–4.1s
+  color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+  size: 6 + (i % 4) * 2, // 6–12px
+  round: i % 3 === 0,
+}));
 
 function pos(r: number, deg: number): [number, number] {
   return [CX + r * Math.cos(deg * DEG), CY + r * Math.sin(deg * DEG)];
@@ -372,7 +393,8 @@ export function SimuladorBracket() {
       </div>
 
       {/* Cuadro radial */}
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-3xl mx-auto relative">
+        {championTeam && <Confetti key={graph.champion ?? "champ"} />}
         <svg
           viewBox="0 0 1000 1000"
           className="w-full h-auto select-none"
@@ -418,8 +440,29 @@ export function SimuladorBracket() {
             );
           })}
 
-          {/* Centro: trofeo o campeón */}
-          {championTeam ? (
+          {/* Trofeo: centrado y, al haber campeón, sube y encoge (se conserva).
+              Respaldo dibujado debajo por si aún no hay imagen en /trofeo.svg. */}
+          <g
+            className="sim-trophy-move"
+            style={{
+              transform: championTeam
+                ? `translate(${CX}px, ${CY - 138}px) scale(0.58)`
+                : `translate(${CX}px, ${CY}px) scale(1)`,
+            }}
+          >
+            <TrophyMark />
+            <image
+              href="/trofeo.svg"
+              x={-TROPHY_W / 2}
+              y={-TROPHY_H / 2}
+              width={TROPHY_W}
+              height={TROPHY_H}
+              preserveAspectRatio="xMidYMid meet"
+            />
+          </g>
+
+          {/* Bandera del campeón en el centro */}
+          {championTeam && (
             <g transform={`translate(${CX} ${CY})`}>
               <g key={graph.champion ?? "champ"}>
                 <circle className="sim-pulse" r={FLAG_CHAMP} fill="var(--accent)" />
@@ -442,21 +485,6 @@ export function SimuladorBracket() {
                 </g>
               </g>
             </g>
-          ) : (
-            <>
-              {/* Respaldo dibujado: se ve si todavía no hay imagen en /trofeo.png */}
-              <TrophyMark />
-              {/* Imagen propia opcional: añade public/trofeo.svg al repo y aparece
-                  encima. Si no existe, no se renderiza nada y queda el dibujo. */}
-              <image
-                href="/trofeo.svg"
-                x={CX - 78}
-                y={CY - 92}
-                width={156}
-                height={184}
-                preserveAspectRatio="xMidYMid meet"
-              />
-            </>
           )}
         </svg>
       </div>
@@ -471,11 +499,37 @@ export function SimuladorBracket() {
   );
 }
 
-// Trofeo dorado genérico (ilustración propia) para el centro del cuadro.
+// Lluvia de confetti sobre el cuadro al coronar campeón.
+function Confetti() {
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 overflow-hidden z-10"
+      aria-hidden
+    >
+      {CONFETTI.map((c, i) => (
+        <span
+          key={i}
+          className="sim-confetti absolute top-0 block"
+          style={{
+            left: `${c.left}%`,
+            width: c.size,
+            height: c.size * 1.4,
+            background: c.color,
+            borderRadius: c.round ? "9999px" : "1px",
+            animationDelay: `${c.delay}s`,
+            animationDuration: `${c.duration}s`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// Trofeo dorado genérico (ilustración propia), dibujado alrededor del origen;
+// el grupo padre lo posiciona y escala.
 function TrophyMark() {
   return (
     <g
-      transform={`translate(${CX} ${CY})`}
       fill="url(#sim-gold)"
       stroke="#8a6314"
       strokeWidth={1.2}
