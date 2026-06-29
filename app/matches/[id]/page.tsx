@@ -12,6 +12,7 @@ import { fetchResults } from "@/lib/results";
 import { fetchProfilesLite, type ProfileLite } from "@/lib/profiles";
 import { stageLabel } from "@/lib/utils/format";
 import { MatchDetailView } from "@/components/MatchDetailView";
+import { MatchPreview } from "@/components/MatchPreview";
 import { MatchPrediction } from "@/components/MatchPrediction";
 import type { MatchDetail } from "@/lib/providers";
 import type { Pick } from "@/lib/scoring";
@@ -243,12 +244,23 @@ export default function MatchDetailPage() {
         </div>
       </div>
 
+      {/* Previa: pronóstico, forma, cara a cara y bajas (antes del partido) */}
+      {detail?.preview && !finished && (
+        <MatchPreview
+          preview={detail.preview}
+          homeId={homeTeamId}
+          awayId={awayTeamId}
+          home={home}
+          away={away}
+        />
+      )}
+
       {/* Detalle del partido: cronología, alineaciones y estadísticas */}
       {detail && (
         <MatchDetailView
           detail={detail}
-          homeId={match.homeTeamId}
-          awayId={match.awayTeamId}
+          homeId={homeTeamId}
+          awayId={awayTeamId}
           home={home}
           away={away}
         />

@@ -83,6 +83,49 @@ export interface MatchDetail {
   lineups: TeamLineup[];
   events: MatchEvent[];
   statistics: TeamStat[];
+  // Previa (pronóstico, forma, cara a cara, bajas). Opcional: solo pre-partido.
+  preview?: MatchPreview | null;
+}
+
+// --- Previa del partido (pronóstico, forma, H2H, bajas) -------------------
+
+export interface PreviewPrediction {
+  homePct: number; // probabilidad de victoria local (0-100)
+  drawPct: number;
+  awayPct: number;
+  advice: string | null; // "consejo" de la API
+  winnerName: string | null; // favorito según la API
+  winnerComment: string | null;
+}
+
+export interface PreviewForm {
+  home: string; // racha reciente, p. ej. "WWDLW" (V/E/D)
+  away: string;
+}
+
+export interface H2HMatch {
+  date: string; // ISO
+  homeName: string;
+  awayName: string;
+  homeTeamId: string | null;
+  awayTeamId: string | null;
+  homeScore: number | null;
+  awayScore: number | null;
+}
+
+export interface InjuryItem {
+  teamId: string | null;
+  teamName: string;
+  player: string;
+  reason: string; // motivo, p. ej. "Knee Injury", "Suspended"
+  type: string; // "Missing Fixture" | "Questionable"
+}
+
+export interface MatchPreview {
+  prediction: PreviewPrediction | null;
+  form: PreviewForm | null;
+  h2h: H2HMatch[];
+  injuries: InjuryItem[];
 }
 
 // --- Goleadores (Bota de Oro) ---------------------------------------------
@@ -107,6 +150,8 @@ export interface ResultsProvider {
   fetchLiveFixtures(ls: LeagueSeason): Promise<ProviderCall<ProviderFixture[]>>;
   // Detalle de un partido por su id externo (3 llamadas: 11s, eventos, stats).
   fetchFixtureDetail(externalId: number): Promise<ProviderCall<MatchDetail>>;
+  // Previa: pronóstico + forma + cara a cara (1 llamada) y bajas (1 llamada).
+  fetchMatchPreview(externalId: number): Promise<ProviderCall<MatchPreview>>;
   // Máximos goleadores de la liga/temporada (Bota de Oro).
   fetchTopScorers(ls: LeagueSeason): Promise<ProviderCall<TopScorer[]>>;
 }

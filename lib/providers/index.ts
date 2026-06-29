@@ -17,4 +17,9 @@ export type {
   MatchEvent,
   TeamStat,
   TopScorer,
+  MatchPreview,
+  PreviewPrediction,
+  PreviewForm,
+  H2HMatch,
+  InjuryItem,
 } from "./types";
