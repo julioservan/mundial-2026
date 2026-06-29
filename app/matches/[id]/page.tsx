@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { MATCHES } from "@/lib/data/matches";
@@ -14,7 +14,7 @@ import { stageLabel } from "@/lib/utils/format";
 import { MatchDetailView } from "@/components/MatchDetailView";
 import { MatchPreview } from "@/components/MatchPreview";
 import { MatchPrediction } from "@/components/MatchPrediction";
-import type { MatchDetail } from "@/lib/providers";
+import type { MatchDetail, MatchEvent } from "@/lib/providers";
 import type { Pick } from "@/lib/scoring";
 
 type PlayerLite = ProfileLite;
@@ -42,11 +42,21 @@ export default function MatchDetailPage() {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(() => Date.now());
+  const [goalToast, setGoalToast] = useState<string | null>(null);
+  // Nº de goles visto en el último sondeo, para detectar uno nuevo en vivo.
+  const prevGoalsRef = useRef<number | null>(null);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(t);
   }, []);
+
+  // El aviso de gol se autocierra a los 6 s.
+  useEffect(() => {
+    if (!goalToast) return;
+    const t = setTimeout(() => setGoalToast(null), 6_000);
+    return () => clearTimeout(t);
+  }, [goalToast]);
 
   // Estado del partido + marcador en vivo + cronología (refrescable en directo).
   const fetchLive = useCallback(async () => {
@@ -69,6 +79,23 @@ export default function MatchDetailPage() {
       });
       setScorers({ home: mi.homeScorers ?? [], away: mi.awayScorers ?? [] });
       setDetail(mi.detail ?? null);
+
+      // Aviso de gol: si aparece un gol nuevo mientras el partido está en vivo.
+      const goals = ((mi.detail?.events ?? []) as MatchEvent[]).filter(
+        (e) => e.type.toLowerCase() === "goal" && e.detail !== "Missed Penalty",
+      );
+      const prev = prevGoalsRef.current;
+      prevGoalsRef.current = goals.length;
+      if (prev != null && goals.length > prev && mi.status === "live") {
+        const newest = [...goals].sort(
+          (a, b) => a.minute - b.minute || (a.extra ?? 0) - (b.extra ?? 0),
+        )[goals.length - 1];
+        const team = getTeam(newest.teamId);
+        const who = newest.player ? newest.player : "Gol";
+        setGoalToast(
+          `⚽ ¡Gooool! ${who}${team ? ` · ${team.name}` : ""} (${newest.minute}')`,
+        );
+      }
     }
     setResult(results[id] ?? null);
   }, [id]);
@@ -165,6 +192,15 @@ export default function MatchDetailPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
+      {/* Aviso flotante de gol en vivo */}
+      {goalToast && (
+        <div className="fixed top-4 inset-x-0 z-50 flex justify-center px-4 pointer-events-none">
+          <div className="pointer-events-auto bg-pink text-white font-semibold text-sm px-5 py-3 rounded-full shadow-xl animate-pulse">
+            {goalToast}
+          </div>
+        </div>
+      )}
+
       <Link
         href="/matches"
         className="text-sm font-semibold text-accent hover:underline underline-offset-4"

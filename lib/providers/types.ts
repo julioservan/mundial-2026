@@ -79,10 +79,23 @@ export interface TeamStat {
   stats: { type: string; value: string | number | null }[];
 }
 
+// Valoración de un jugador en el partido (para el MVP / mejor del partido).
+export interface PlayerRating {
+  name: string;
+  photo: string | null;
+  teamId: string | null;
+  teamName: string;
+  rating: number; // 0-10 (API-Football)
+  goals: number;
+  assists: number;
+}
+
 export interface MatchDetail {
   lineups: TeamLineup[];
   events: MatchEvent[];
   statistics: TeamStat[];
+  // Valoraciones de jugadores (para el MVP). Opcional: aparece al jugarse.
+  players?: PlayerRating[];
   // Previa (pronóstico, forma, cara a cara, bajas). Opcional: solo pre-partido.
   preview?: MatchPreview | null;
 }

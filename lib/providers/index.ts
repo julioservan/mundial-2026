@@ -17,6 +17,7 @@ export type {
   MatchEvent,
   TeamStat,
   TopScorer,
+  PlayerRating,
   MatchPreview,
   PreviewPrediction,
   PreviewForm,
