@@ -134,9 +134,13 @@ body {
 
 /* Lluvia de confetti al coronar campeón */
 @keyframes sim-confetti {
-  0% { transform: translate3d(0, -24px, 0) rotate(0deg); opacity: 0; }
-  8% { opacity: 1; }
-  100% { transform: translate3d(0, 760px, 0) rotate(560deg); opacity: 0; }
+  0% { transform: translate3d(0, -32px, 0) rotate(0deg); opacity: 0; }
+  6% { opacity: 1; }
+  90% { opacity: 1; }
+  100% {
+    transform: translate3d(var(--dx, 0px), 840px, 0) rotate(var(--spin, 560deg));
+    opacity: 0;
+  }
 }
 
 .sim-confetti {

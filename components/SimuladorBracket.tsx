@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 import type { MatchStage } from "@/types";
 import { KNOCKOUT_SLOTS } from "@/lib/data/matches";
 import { getTeam } from "@/lib/data/teams";
@@ -60,13 +61,15 @@ const CONFETTI_COLORS = [
   "var(--violet)",
   "#ffffff",
 ];
-const CONFETTI = Array.from({ length: 54 }, (_, i) => ({
-  left: (i * 37) % 100,
-  delay: ((i * 53) % 130) / 100, // 0–1.3s
-  duration: 2.6 + ((i * 29) % 16) / 10, // 2.6–4.1s
+const CONFETTI = Array.from({ length: 160 }, (_, i) => ({
+  left: (i * 31) % 100,
+  delay: ((i * 47) % 220) / 100, // 0–2.2s (oleadas)
+  duration: 2.2 + ((i * 29) % 22) / 10, // 2.2–4.4s
   color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
-  size: 6 + (i % 4) * 2, // 6–12px
+  size: 7 + (i % 6) * 2, // 7–17px
   round: i % 3 === 0,
+  drift: ((i * 53) % 220) - 110, // -110–110px de deriva lateral
+  spin: 540 + ((i * 67) % 540), // 540–1080° de giro
 }));
 
 function pos(r: number, deg: number): [number, number] {
@@ -510,15 +513,19 @@ function Confetti() {
         <span
           key={i}
           className="sim-confetti absolute top-0 block"
-          style={{
-            left: `${c.left}%`,
-            width: c.size,
-            height: c.size * 1.4,
-            background: c.color,
-            borderRadius: c.round ? "9999px" : "1px",
-            animationDelay: `${c.delay}s`,
-            animationDuration: `${c.duration}s`,
-          }}
+          style={
+            {
+              left: `${c.left}%`,
+              width: c.size,
+              height: c.size * 1.4,
+              background: c.color,
+              borderRadius: c.round ? "9999px" : "1px",
+              animationDelay: `${c.delay}s`,
+              animationDuration: `${c.duration}s`,
+              "--dx": `${c.drift}px`,
+              "--spin": `${c.spin}deg`,
+            } as CSSProperties
+          }
         />
       ))}
     </div>
