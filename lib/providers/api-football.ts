@@ -11,6 +11,7 @@ import { teamIdFromName } from "@/lib/data/team-aliases";
 import type {
   LeagueSeason,
   MatchDetail,
+  PlayerRating,
   MatchPreview,
   PreviewPrediction,
   PreviewForm,
@@ -199,22 +200,33 @@ export const apiFootball: ResultsProvider = {
   },
 
   async fetchFixtureDetail(externalId): Promise<ProviderCall<MatchDetail>> {
-    const [lineups, events, stats] = await Promise.all([
+    const [lineups, events, stats, players] = await Promise.all([
       get<ApiLineup>(`/fixtures/lineups?fixture=${externalId}`),
       get<ApiEvent>(`/fixtures/events?fixture=${externalId}`),
       get<ApiStat>(`/fixtures/statistics?fixture=${externalId}`),
+      get<ApiPlayers>(`/fixtures/players?fixture=${externalId}`),
     ]);
-    const errors = [...lineups.errors, ...events.errors, ...stats.errors];
+    const errors = [
+      ...lineups.errors,
+      ...events.errors,
+      ...stats.errors,
+      ...players.errors,
+    ];
     const data: MatchDetail = {
       lineups: lineups.response.map(mapLineup),
       events: events.response.map(mapEvent),
       statistics: stats.response.map(mapStat),
+      players: players.response.flatMap(mapPlayers),
     };
     return {
       data,
-      requests: 3,
+      requests: 4,
       errors,
-      rateLimit: stats.rateLimit ?? events.rateLimit ?? lineups.rateLimit,
+      rateLimit:
+        players.rateLimit ??
+        stats.rateLimit ??
+        events.rateLimit ??
+        lineups.rateLimit,
     };
   },
 
@@ -331,6 +343,41 @@ function mapStat(s: ApiStat): TeamStat {
     teamName: s.team.name,
     stats: (s.statistics ?? []).map((x) => ({ type: x.type, value: x.value })),
   };
+}
+
+// --- Valoraciones de jugadores (MVP): tipos crudos y mapeo -----------------
+
+interface ApiPlayers {
+  team: { name: string };
+  players: {
+    player: { name: string; photo: string | null };
+    statistics: {
+      games?: { minutes?: number | null; rating?: string | null };
+      goals?: { total?: number | null; assists?: number | null };
+    }[];
+  }[];
+}
+
+function mapPlayers(t: ApiPlayers): PlayerRating[] {
+  const teamId = teamIdFromName(t.team.name);
+  const out: PlayerRating[] = [];
+  for (const p of t.players ?? []) {
+    const st = p.statistics?.[0];
+    const minutes = st?.games?.minutes ?? 0;
+    const rating = st?.games?.rating ? Number(st.games.rating) : NaN;
+    // Solo jugadores que disputaron minutos y tienen valoración.
+    if (!minutes || Number.isNaN(rating) || rating <= 0) continue;
+    out.push({
+      name: p.player.name,
+      photo: p.player.photo ?? null,
+      teamId,
+      teamName: t.team.name,
+      rating,
+      goals: st?.goals?.total ?? 0,
+      assists: st?.goals?.assists ?? 0,
+    });
+  }
+  return out;
 }
 
 // --- Previa: tipos crudos y mapeo ------------------------------------------

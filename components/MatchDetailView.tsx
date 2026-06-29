@@ -1,12 +1,14 @@
 "use client";
 
 import type { Team } from "@/types";
+import { getTeam } from "@/lib/data/teams";
 import type {
   MatchDetail,
   TeamLineup,
   LineupPlayer,
   MatchEvent,
   TeamStat,
+  PlayerRating,
 } from "@/lib/providers";
 
 interface Props {
@@ -237,16 +239,105 @@ function Stats({
   );
 }
 
+// Mejor del partido + valoraciones de jugadores (cuando hay datos).
+function Ratings({ players }: { players: PlayerRating[] }) {
+  if (players.length === 0) return null;
+  const sorted = [...players].sort((a, b) => b.rating - a.rating);
+  const mvp = sorted[0];
+  const rest = sorted.slice(1, 7);
+  const mvpTeam = getTeam(mvp.teamId);
+  const initials = mvp.name
+    .split(" ")
+    .map((w) => w[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  return (
+    <section className="mb-8">
+      <h2 className="text-xl font-bold tracking-tight mb-4">Jugador del partido</h2>
+      <div className="bg-surface border border-accent/40 rounded-2xl p-5 flex items-center gap-4">
+        {mvp.photo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={mvp.photo}
+            alt={mvp.name}
+            width={56}
+            height={56}
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            className="w-14 h-14 rounded-full object-cover bg-surface-muted shrink-0"
+          />
+        ) : (
+          <div className="w-14 h-14 rounded-full bg-surface-muted shrink-0 flex items-center justify-center text-sm font-semibold text-muted-foreground">
+            {initials || "?"}
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold tracking-tight truncate flex items-center gap-1.5">
+            <span aria-hidden>⭐</span>
+            {mvp.name}
+          </div>
+          <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+            <span aria-hidden>{mvpTeam?.flag}</span>
+            <span className="truncate">{mvpTeam?.name ?? mvp.teamName}</span>
+            {mvp.goals > 0 && <span>· {mvp.goals}⚽</span>}
+            {mvp.assists > 0 && <span>· {mvp.assists}🅰️</span>}
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          <div className="font-display text-3xl leading-none text-accent">
+            {mvp.rating.toFixed(1)}
+          </div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            nota
+          </div>
+        </div>
+      </div>
+
+      {rest.length > 0 && (
+        <ul className="mt-3 bg-surface border border-border rounded-2xl divide-y divide-border/60 overflow-hidden">
+          {rest.map((p, i) => {
+            const t = getTeam(p.teamId);
+            return (
+              <li
+                key={i}
+                className="flex items-center gap-3 px-4 py-2.5 text-sm"
+              >
+                <span className="text-muted-foreground/60 w-4 text-center shrink-0">
+                  {i + 2}
+                </span>
+                <span aria-hidden>{t?.flag}</span>
+                <span className="flex-1 truncate">{p.name}</span>
+                {p.goals > 0 && (
+                  <span className="text-xs text-muted-foreground">{p.goals}⚽</span>
+                )}
+                <span className="font-mono font-semibold tabular-nums">
+                  {p.rating.toFixed(1)}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export function MatchDetailView({ detail, homeId, home, away }: Props) {
+  const players = detail.players ?? [];
   const hasContent =
     detail.events.length > 0 ||
     detail.lineups.length > 0 ||
-    detail.statistics.length > 0;
+    detail.statistics.length > 0 ||
+    players.length > 0;
   if (!hasContent) return null;
 
   return (
     <div>
       <Timeline events={detail.events} homeId={homeId} />
+      <Ratings players={players} />
       <Lineups lineups={detail.lineups} homeId={homeId} home={home} away={away} />
       <Stats statistics={detail.statistics} homeId={homeId} />
     </div>
