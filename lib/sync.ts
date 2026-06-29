@@ -16,8 +16,11 @@ import { KNOCKOUT_SLOTS, groupMatchByPair } from "@/lib/data/matches";
 import { getTeam } from "@/lib/data/teams";
 
 const DAILY_CAP = Number(process.env.APIFOOTBALL_DAILY_CAP ?? 95);
+// Recarga completa: con plan Pro hay cuota de sobra, así que sincronizamos a
+// menudo (cada 2 min). La recarga completa mapea bien TODO (grupos y
+// eliminatorias) y trae el marcador en directo de los partidos en juego.
 const FULL_SYNC_INTERVAL_MIN = Number(
-  process.env.APIFOOTBALL_FULL_SYNC_MIN ?? 30,
+  process.env.APIFOOTBALL_FULL_SYNC_MIN ?? 2,
 );
 // Anti-rebote: ignora llamadas auto/live si la última fue hace menos de esto
 // (protege la cuota si el endpoint recibe pings demasiado seguidos).
@@ -336,7 +339,11 @@ export async function runSync(
       FULL_SYNC_INTERVAL_MIN * 60_000;
 
   const wantFull = mode === "full" || (mode === "auto" && fullStale);
-  const wantLive = mode === "live" || (mode === "auto" && active);
+  // El "en vivo" parcial (live=all) solo mapea bien grupos; las eliminatorias se
+  // resuelven con la recarga completa. Por eso en auto NO usamos el live parcial
+  // (que además depende de horarios estáticos): la recarga completa frecuente ya
+  // trae los marcadores en directo de todo. Live solo si se pide explícitamente.
+  const wantLive = mode === "live";
 
   async function capLeft(): Promise<boolean> {
     return (await getDailyCount()) < DAILY_CAP;
