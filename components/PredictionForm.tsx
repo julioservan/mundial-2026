@@ -21,7 +21,7 @@ import {
   type PredEntry,
   type PredMap,
   clearLocal,
-  deleteAllRemote,
+  deleteManyRemote,
   deleteRemote,
   fetchRemote,
   hasAnyPick,
@@ -302,19 +302,26 @@ export function PredictionForm({ matches }: Props) {
     update(matchId, (e) => (e ? { ...e, advance: who } : null));
   }
 
+  // Solo se pueden resetear los partidos que aún no han empezado; los ya
+  // jugados quedan registrados y no se tocan.
+  const resettableIds = Object.keys(picks).filter((id) => editable(id));
+
   async function handleReset() {
     setConfirmReset(false);
-    setPicks({});
+    if (resettableIds.length === 0) return;
+    const next = { ...picks };
+    for (const id of resettableIds) delete next[id];
+    setPicks(next);
     if (user) {
       setStatus("saving");
       try {
-        await deleteAllRemote(user.id);
+        await deleteManyRemote(user.id, resettableIds);
         setStatus("saved");
       } catch {
         setStatus("error");
       }
     } else {
-      clearLocal();
+      saveLocal(next);
     }
   }
 
@@ -367,7 +374,12 @@ export function PredictionForm({ matches }: Props) {
             {user && <SyncBadge status={status} />}
             <button
               onClick={() => setConfirmReset(true)}
-              disabled={completed === 0}
+              disabled={resettableIds.length === 0}
+              title={
+                resettableIds.length === 0
+                  ? "No hay pronósticos de partidos sin empezar que borrar"
+                  : undefined
+              }
               className="text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Resetear
@@ -571,7 +583,7 @@ export function PredictionForm({ matches }: Props) {
 
       {confirmReset && (
         <ResetConfirm
-          count={completed}
+          count={resettableIds.length}
           remote={Boolean(user)}
           onCancel={() => setConfirmReset(false)}
           onConfirm={handleReset}
@@ -606,15 +618,19 @@ function ResetConfirm({
         onClick={(e) => e.stopPropagation()}
       >
         <h3 id="reset-title" className="text-lg font-bold tracking-tight mb-2">
-          ¿Borrar todos tus pronósticos?
+          ¿Resetear tus pronósticos?
         </h3>
         <p className="text-sm text-muted-foreground mb-1">
           Se eliminarán tus{" "}
           <span className="font-semibold text-foreground">
             {count} pronóstico{count === 1 ? "" : "s"}
           </span>{" "}
-          de <span className="text-foreground">todos los partidos</span> (grupos y
-          eliminatorias).
+          de partidos que{" "}
+          <span className="text-foreground">aún no han empezado</span>.
+        </p>
+        <p className="text-sm text-muted-foreground mb-1">
+          Los de partidos <span className="text-foreground">ya jugados</span> se
+          conservan: quedan registrados y no se pueden borrar.
         </p>
         <p className="text-sm text-pink font-medium mb-5">
           Esta acción no se puede deshacer.
