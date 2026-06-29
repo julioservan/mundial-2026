@@ -111,8 +111,10 @@ export function MatchPrediction({ match, locked, result, onSaved }: Props) {
 
   function chooseWinner(pick: Pick) {
     if (locked) return;
+    // Re-pulsar la opción ya elegida NO la borra (evita perder pronósticos sin
+    // querer); solo se cambia eligiendo otra opción.
+    if (entry?.pick === pick) return;
     mutate((e) => {
-      if (e?.pick === pick) return null; // re-pulsar deselecciona
       const base = e ?? { pick, home: "", away: "", advance: null };
       return { ...base, pick, advance: pick === "draw" ? base.advance : null };
     });

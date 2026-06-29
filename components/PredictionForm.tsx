@@ -277,16 +277,16 @@ export function PredictionForm({ matches }: Props) {
   function chooseWinner(matchId: string, pick: Pick) {
     if (!editable(matchId)) return;
     const match = enriched.find((m) => m.id === matchId);
-    const wasSelected = picks[matchId]?.pick === pick;
+    // Re-pulsar la opción ya elegida NO la borra (evita perder pronósticos sin
+    // querer); solo se cambia eligiendo otra opción.
+    if (picks[matchId]?.pick === pick) return;
     update(matchId, (e) => {
-      // Re-pulsar el ganador elegido lo deselecciona (borra la entrada).
-      if (e?.pick === pick) return null;
       const base = e ?? { pick, home: "", away: "", advance: null };
       const advance = pick === "draw" ? base.advance : null;
       return { ...base, pick, advance };
     });
     // Auto-avance solo en grupos (en KO aún hay que meter el resultado).
-    if (!wasSelected && match && !isKnockout(match)) advanceFrom(matchId);
+    if (match && !isKnockout(match)) advanceFrom(matchId);
   }
 
   function setScore(matchId: string, side: "home" | "away", value: string) {
