@@ -6,7 +6,6 @@ import { KNOCKOUT_SLOTS } from "@/lib/data/matches";
 import { getTeam } from "@/lib/data/teams";
 import { fetchFixtureAssignments } from "@/lib/fixtures";
 import type { SlotAssignment } from "@/lib/bracket";
-import { stageLabel } from "@/lib/utils/format";
 
 type Side = "home" | "away";
 type Picks = Record<string, Side>;
@@ -20,7 +19,6 @@ interface SimMatch {
 
 interface SimRound {
   stage: MatchStage;
-  label: string;
   matches: SimMatch[];
 }
 
@@ -34,6 +32,37 @@ const ORDER: string[] = [
   ...KNOCKOUT_SLOTS.semifinal,
   KNOCKOUT_SLOTS.final,
 ];
+
+// --- Geometría del cuadro radial -------------------------------------------
+const CX = 500;
+const CY = 500;
+const DEG = Math.PI / 180;
+const SEG = 360 / 32; // 32 selecciones alrededor del círculo
+// Radios de cada anillo (de fuera hacia dentro).
+const R_LEAF = 450; // 32 selecciones
+const R_R32 = 358; // 16 ganadores de 16avos
+const R_R16 = 268; // 8 ganadores de octavos
+const R_QF = 180; // 4 de cuartos
+const R_SF = 98; // 2 finalistas
+const FLAG_LEAF = 27;
+const FLAG_WIN = 20;
+const FLAG_CHAMP = 34;
+
+function pos(r: number, deg: number): [number, number] {
+  return [CX + r * Math.cos(deg * DEG), CY + r * Math.sin(deg * DEG)];
+}
+
+// Conector en codo (polar): radial hacia dentro + arco hasta el ángulo padre.
+function elbow(rC: number, aC: number, rP: number, aP: number): string {
+  const [x1, y1] = pos(rC, aC);
+  const [x2, y2] = pos(rP, aC);
+  const [x3, y3] = pos(rP, aP);
+  const sweep = aP >= aC ? 1 : 0;
+  return `M${x1.toFixed(1)} ${y1.toFixed(1)} L${x2.toFixed(1)} ${y2.toFixed(1)} A${rP} ${rP} 0 0 ${sweep} ${x3.toFixed(1)} ${y3.toFixed(1)}`;
+}
+
+const leafAngle = (k: number) => -90 + (k + 0.5) * SEG;
+const avg = (a: number, b: number) => (a + b) / 2;
 
 // --- Codificación compacta del estado para compartir (2 bits por cruce) ----
 function toB64url(bytes: Uint8Array): string {
@@ -88,6 +117,17 @@ function readInitialPicks(): Picks {
     // sin estado guardado
   }
   return {};
+}
+
+interface BNode {
+  id: string;
+  x: number;
+  y: number;
+  r: number;
+  teamId: string | null;
+  parent: SimMatch | null; // cruce al que alimenta (null = campeón)
+  side: Side;
+  kind: "leaf" | "win" | "champion";
 }
 
 export function SimuladorBracket() {
@@ -161,23 +201,104 @@ export function SimuladorBracket() {
     const fin = next([KNOCKOUT_SLOTS.final], "final", sf);
 
     return [
-      { stage: "round32", label: "16avos", matches: r32 },
-      { stage: "round16", label: "Octavos", matches: r16 },
-      { stage: "quarterfinal", label: "Cuartos", matches: qf },
-      { stage: "semifinal", label: "Semis", matches: sf },
-      { stage: "final", label: "Final", matches: fin },
+      { stage: "round32", matches: r32 },
+      { stage: "round16", matches: r16 },
+      { stage: "quarterfinal", matches: qf },
+      { stage: "semifinal", matches: sf },
+      { stage: "final", matches: fin },
     ];
   }, [assignments, winnerOf]);
 
-  const champion = winnerOf(rounds[4].matches[0]);
-  const championTeam = getTeam(champion);
+  // Posiciona conectores y nodos del cuadro radial.
+  const graph = useMemo(() => {
+    const r32 = rounds[0].matches; // 16
+    const r16 = rounds[1].matches; // 8
+    const qf = rounds[2].matches; // 4
+    const sf = rounds[3].matches; // 2
+    const fin = rounds[4].matches[0];
 
+    const la = Array.from({ length: 32 }, (_, k) => leafAngle(k));
+    const a32 = r32.map((_, i) => avg(la[2 * i], la[2 * i + 1]));
+    const a16 = r16.map((_, i) => avg(a32[2 * i], a32[2 * i + 1]));
+    const aQf = qf.map((_, i) => avg(a16[2 * i], a16[2 * i + 1]));
+    const aSf = sf.map((_, i) => avg(aQf[2 * i], aQf[2 * i + 1]));
+
+    const lines: string[] = [];
+    r32.forEach((_, i) => {
+      lines.push(elbow(R_LEAF, la[2 * i], R_R32, a32[i]));
+      lines.push(elbow(R_LEAF, la[2 * i + 1], R_R32, a32[i]));
+    });
+    r16.forEach((_, i) => {
+      lines.push(elbow(R_R32, a32[2 * i], R_R16, a16[i]));
+      lines.push(elbow(R_R32, a32[2 * i + 1], R_R16, a16[i]));
+    });
+    qf.forEach((_, i) => {
+      lines.push(elbow(R_R16, a16[2 * i], R_QF, aQf[i]));
+      lines.push(elbow(R_R16, a16[2 * i + 1], R_QF, aQf[i]));
+    });
+    sf.forEach((_, i) => {
+      lines.push(elbow(R_QF, aQf[2 * i], R_SF, aSf[i]));
+      lines.push(elbow(R_QF, aQf[2 * i + 1], R_SF, aSf[i]));
+    });
+    // Final: cada semifinalista hacia el centro (líneas horizontales).
+    sf.forEach((_, i) => {
+      const [x, y] = pos(R_SF, aSf[i]);
+      lines.push(`M${x.toFixed(1)} ${y.toFixed(1)} L${CX} ${CY}`);
+    });
+
+    const nodes: BNode[] = [];
+    const node = (
+      id: string,
+      r: number,
+      ang: number,
+      teamId: string | null,
+      parent: SimMatch | null,
+      side: Side,
+      kind: BNode["kind"],
+    ): BNode => {
+      const [x, y] = pos(r, ang);
+      return { id, x, y, r: kind === "leaf" ? FLAG_LEAF : FLAG_WIN, teamId, parent, side, kind };
+    };
+
+    // Hojas: las 32 selecciones de 16avos.
+    r32.forEach((m, i) => {
+      nodes.push(node(`leaf-${2 * i}`, R_LEAF, la[2 * i], m.home, m, "home", "leaf"));
+      nodes.push(
+        node(`leaf-${2 * i + 1}`, R_LEAF, la[2 * i + 1], m.away, m, "away", "leaf"),
+      );
+    });
+    // Ganadores de cada ronda → alimentan el cruce de la ronda siguiente.
+    r32.forEach((m, i) =>
+      nodes.push(
+        node(`r32-${i}`, R_R32, a32[i], winnerOf(m), r16[i >> 1], i % 2 === 0 ? "home" : "away", "win"),
+      ),
+    );
+    r16.forEach((m, i) =>
+      nodes.push(
+        node(`r16-${i}`, R_R16, a16[i], winnerOf(m), qf[i >> 1], i % 2 === 0 ? "home" : "away", "win"),
+      ),
+    );
+    qf.forEach((m, i) =>
+      nodes.push(
+        node(`qf-${i}`, R_QF, aQf[i], winnerOf(m), sf[i >> 1], i % 2 === 0 ? "home" : "away", "win"),
+      ),
+    );
+    sf.forEach((m, i) =>
+      nodes.push(
+        node(`sf-${i}`, R_SF, aSf[i], winnerOf(m), fin, i % 2 === 0 ? "home" : "away", "win"),
+      ),
+    );
+
+    return { lines, nodes, champion: winnerOf(fin) };
+  }, [rounds, winnerOf]);
+
+  const championTeam = getTeam(graph.champion);
   const pickedCount = ORDER.filter((id) => picks[id]).length;
 
-  function choose(m: SimMatch, side: Side) {
-    if (!m.home || !m.away) return;
+  function choose(parent: SimMatch, side: Side) {
+    if (!parent.home || !parent.away) return;
     setPicks((prev) => {
-      const next = { ...prev, [m.id]: side };
+      const next = { ...prev, [parent.id]: side };
       persist(next);
       return next;
     });
@@ -192,10 +313,10 @@ export function SimuladorBracket() {
   }
 
   async function share() {
-    const url = `${window.location.origin}/simulador?b=${encodePicks(picks)}`;
-    window.history.replaceState(null, "", `/simulador?b=${encodePicks(picks)}`);
+    const path = `/simulador?b=${encodePicks(picks)}`;
+    window.history.replaceState(null, "", path);
     try {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(`${window.location.origin}${path}`);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -205,7 +326,7 @@ export function SimuladorBracket() {
 
   if (!hydrated) {
     return (
-      <div className="h-64 rounded-2xl bg-surface border border-border animate-pulse" />
+      <div className="aspect-square max-w-3xl mx-auto rounded-full bg-surface border border-border animate-pulse" />
     );
   }
 
@@ -250,114 +371,166 @@ export function SimuladorBracket() {
         </div>
       </div>
 
-      {/* Cuadro (scroll horizontal en móvil) */}
-      <div className="overflow-x-auto pb-4">
-        <div className="flex gap-4 min-w-max">
-          {rounds.map((round) => (
-            <div
-              key={round.stage}
-              className="flex flex-col justify-around gap-3 w-[180px] shrink-0"
-            >
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-center sticky top-16">
-                {round.label}
-              </div>
-              {round.matches.map((m) => {
-                const winner = winnerOf(m);
-                return (
-                  <div
-                    key={m.id}
-                    className="bg-surface border border-border rounded-xl overflow-hidden text-sm"
-                  >
-                    <TeamRow
-                      teamId={m.home}
-                      selected={picks[m.id] === "home"}
-                      isWinner={winner != null && winner === m.home}
-                      disabled={!m.home || !m.away}
-                      onClick={() => choose(m, "home")}
-                    />
-                    <div className="h-px bg-border" />
-                    <TeamRow
-                      teamId={m.away}
-                      selected={picks[m.id] === "away"}
-                      isWinner={winner != null && winner === m.away}
-                      disabled={!m.home || !m.away}
-                      onClick={() => choose(m, "away")}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          ))}
+      {/* Cuadro radial */}
+      <div className="max-w-3xl mx-auto">
+        <svg
+          viewBox="0 0 1000 1000"
+          className="w-full h-auto select-none"
+          role="img"
+          aria-label="Cuadro de eliminatorias del Mundial 2026"
+        >
+          <defs>
+            <clipPath id="sim-clip-leaf">
+              <circle cx="0" cy="0" r={FLAG_LEAF} />
+            </clipPath>
+            <clipPath id="sim-clip-win">
+              <circle cx="0" cy="0" r={FLAG_WIN} />
+            </clipPath>
+            <clipPath id="sim-clip-champ">
+              <circle cx="0" cy="0" r={FLAG_CHAMP} />
+            </clipPath>
+          </defs>
 
-          {/* Campeón al final del cuadro */}
-          <div className="flex flex-col justify-around w-[150px] shrink-0">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-accent text-center">
-              Campeón
-            </div>
-            <div className="bg-surface border border-accent/50 rounded-xl p-3 text-center">
-              <div className="text-3xl leading-none" aria-hidden>
-                {championTeam?.flag ?? "🏆"}
-              </div>
-              <div className="text-sm font-bold tracking-tight mt-1 truncate">
-                {championTeam?.name ?? "—"}
-              </div>
-            </div>
-          </div>
-        </div>
+          {/* Conectores */}
+          <g fill="none" stroke="var(--border-strong)" strokeWidth={1.4}>
+            {graph.lines.map((d, i) => (
+              <path key={i} d={d} />
+            ))}
+          </g>
+
+          {/* Nodos del cuadro */}
+          {graph.nodes.map((n) => {
+            const clickable = Boolean(n.parent?.home && n.parent?.away);
+            const selected = n.parent ? picks[n.parent.id] === n.side : false;
+            return (
+              <SimNode
+                key={n.id}
+                node={n}
+                clickable={clickable}
+                selected={selected}
+                onPick={() => n.parent && choose(n.parent, n.side)}
+              />
+            );
+          })}
+
+          {/* Centro: trofeo o campeón */}
+          {championTeam ? (
+            <g transform={`translate(${CX} ${CY})`}>
+              <g key={graph.champion ?? "champ"}>
+                <circle className="sim-pulse" r={FLAG_CHAMP} fill="var(--accent)" />
+                <g className="sim-pop">
+                  <circle
+                    r={FLAG_CHAMP + 4}
+                    fill="var(--surface)"
+                    stroke="var(--accent)"
+                    strokeWidth={3}
+                  />
+                  <circle r={FLAG_CHAMP} fill="var(--surface)" />
+                  <text
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fontSize={FLAG_CHAMP * 2.4}
+                    clipPath="url(#sim-clip-champ)"
+                  >
+                    {championTeam.flag}
+                  </text>
+                </g>
+              </g>
+            </g>
+          ) : (
+            <text
+              x={CX}
+              y={CY}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fontSize={64}
+              aria-hidden
+            >
+              🏆
+            </text>
+          )}
+        </svg>
       </div>
 
-      <p className="text-[11px] text-muted-foreground mt-4">
-        Toca el equipo que crees que pasa en cada cruce; el cuadro avanza solo
-        hasta el campeón. Tu quiniela se guarda en este navegador y puedes
-        compartirla con el botón. {pickedCount}/{ORDER.length} cruces elegidos.
+      <p className="text-[11px] text-muted-foreground mt-4 text-center max-w-xl mx-auto">
+        Toca el equipo que crees que pasa en cada cruce; el ganador avanza solo
+        hacia el centro hasta coronar a tu campeón. Tu quiniela se guarda en este
+        navegador y puedes compartirla con el botón. {pickedCount}/{ORDER.length}{" "}
+        cruces elegidos.
       </p>
     </div>
   );
 }
 
-function TeamRow({
-  teamId,
+function SimNode({
+  node,
+  clickable,
   selected,
-  isWinner,
-  disabled,
-  onClick,
+  onPick,
 }: {
-  teamId: string | null;
+  node: BNode;
+  clickable: boolean;
   selected: boolean;
-  isWinner: boolean;
-  disabled: boolean;
-  onClick: () => void;
+  onPick: () => void;
 }) {
-  const team = getTeam(teamId);
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors disabled:cursor-default ${
-        selected || isWinner
-          ? "bg-accent/15 font-semibold"
-          : "hover:bg-surface-muted disabled:hover:bg-transparent"
-      }`}
-    >
-      <span className="text-base shrink-0" aria-hidden>
-        {team?.flag ?? "•"}
-      </span>
-      <span
-        className={`truncate ${team ? "" : "text-muted-foreground/60 text-xs"}`}
-      >
-        {team?.name ?? "Por definir"}
-      </span>
-      {(selected || isWinner) && (
-        <span className="ml-auto text-accent text-xs shrink-0" aria-hidden>
-          ✓
-        </span>
-      )}
-    </button>
-  );
-}
+  const team = getTeam(node.teamId);
+  const isLeaf = node.kind === "leaf";
+  const clip = isLeaf ? "url(#sim-clip-leaf)" : "url(#sim-clip-win)";
 
-// Etiqueta legible de la ronda (reutiliza el formateador del proyecto).
-export function roundLabel(stage: MatchStage): string {
-  return stageLabel(stage);
+  // Nodos internos vacíos: punto de unión (como en un cuadro clásico).
+  if (!team) {
+    if (isLeaf) {
+      return (
+        <g transform={`translate(${node.x} ${node.y})`}>
+          <circle
+            r={node.r}
+            fill="var(--surface)"
+            stroke="var(--border)"
+            strokeWidth={1.5}
+            strokeDasharray="3 3"
+          />
+          <text
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize={18}
+            fill="var(--muted-foreground)"
+          >
+            ?
+          </text>
+        </g>
+      );
+    }
+    return (
+      <circle cx={node.x} cy={node.y} r={4} fill="var(--border-strong)" />
+    );
+  }
+
+  return (
+    <g
+      transform={`translate(${node.x} ${node.y})`}
+      onClick={clickable ? onPick : undefined}
+      style={{ cursor: clickable ? "pointer" : "default" }}
+    >
+      <title>{team.name}</title>
+      {/* Aparición animada: la key por equipo reinicia la animación al avanzar */}
+      <g key={node.teamId ?? "x"} className="sim-pop">
+        {selected && <circle className="sim-pulse" r={node.r} fill="var(--accent)" />}
+        <circle
+          r={node.r + 2}
+          fill="var(--surface)"
+          stroke={selected ? "var(--accent)" : "var(--border-strong)"}
+          strokeWidth={selected ? 3 : 1.5}
+        />
+        <circle r={node.r} fill="var(--surface)" />
+        <text
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontSize={node.r * 2.4}
+          clipPath={clip}
+        >
+          {team.flag}
+        </text>
+      </g>
+    </g>
+  );
 }
