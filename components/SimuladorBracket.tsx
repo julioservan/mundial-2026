@@ -389,6 +389,11 @@ export function SimuladorBracket() {
             <clipPath id="sim-clip-champ">
               <circle cx="0" cy="0" r={FLAG_CHAMP} />
             </clipPath>
+            <linearGradient id="sim-gold" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#fbe7a1" />
+              <stop offset="40%" stopColor="#e8be53" />
+              <stop offset="100%" stopColor="#a9791f" />
+            </linearGradient>
           </defs>
 
           {/* Conectores */}
@@ -438,16 +443,7 @@ export function SimuladorBracket() {
               </g>
             </g>
           ) : (
-            <text
-              x={CX}
-              y={CY}
-              textAnchor="middle"
-              dominantBaseline="central"
-              fontSize={64}
-              aria-hidden
-            >
-              🏆
-            </text>
+            <TrophyMark />
           )}
         </svg>
       </div>
@@ -459,6 +455,49 @@ export function SimuladorBracket() {
         cruces elegidos.
       </p>
     </div>
+  );
+}
+
+// Trofeo dorado genérico (ilustración propia) para el centro del cuadro.
+function TrophyMark() {
+  return (
+    <g
+      transform={`translate(${CX} ${CY})`}
+      fill="url(#sim-gold)"
+      stroke="#8a6314"
+      strokeWidth={1.2}
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      {/* Asas */}
+      <path
+        d="M-30 -50 C-54 -47 -54 -10 -29 -16"
+        fill="none"
+        stroke="url(#sim-gold)"
+        strokeWidth={7}
+        strokeLinecap="round"
+      />
+      <path
+        d="M30 -50 C54 -47 54 -10 29 -16"
+        fill="none"
+        stroke="url(#sim-gold)"
+        strokeWidth={7}
+        strokeLinecap="round"
+      />
+      {/* Copa */}
+      <path d="M-31 -54 L31 -54 C31 -16 13 4 0 8 C-13 4 -31 -16 -31 -54 Z" />
+      {/* Brillo */}
+      <path
+        d="M-18 -48 C-18 -24 -8 -8 -2 -4 C-12 -14 -14 -34 -12 -48 Z"
+        fill="#fdf3cf"
+        opacity={0.55}
+        stroke="none"
+      />
+      {/* Cuello y pie */}
+      <path d="M-6 8 L6 8 L5 24 L-5 24 Z" />
+      <path d="M-17 24 L17 24 L14 33 L-14 33 Z" />
+      <rect x={-25} y={33} width={50} height={11} rx={2} />
+    </g>
   );
 }
 
