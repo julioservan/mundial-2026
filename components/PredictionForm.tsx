@@ -27,6 +27,7 @@ import {
   hasAnyPick,
   loadLocal,
   migrateLocalToRemote,
+  saveAllRemote,
   saveLocal,
   upsertRemote,
 } from "@/lib/predictions";
@@ -300,6 +301,25 @@ export function PredictionForm({ matches }: Props) {
   function setAdvance(matchId: string, who: "home" | "away") {
     if (!editable(matchId)) return;
     update(matchId, (e) => (e ? { ...e, advance: who } : null));
+  }
+
+  // Guardado manual: fuerza la subida inmediata de todos los pronósticos
+  // (cancela los guardados automáticos pendientes y reescribe todo).
+  async function handleSaveNow() {
+    for (const t of Object.values(timersRef.current)) clearTimeout(t);
+    timersRef.current = {};
+    if (!user) {
+      saveLocal(picks);
+      setStatus("saved");
+      return;
+    }
+    setStatus("saving");
+    try {
+      await saveAllRemote(user.id, picks);
+      setStatus("saved");
+    } catch {
+      setStatus("error");
+    }
   }
 
   // Solo se pueden resetear los partidos que aún no han empezado; los ya
@@ -588,6 +608,33 @@ export function PredictionForm({ matches }: Props) {
           onCancel={() => setConfirmReset(false)}
           onConfirm={handleReset}
         />
+      )}
+
+      {/* Barra flotante: guardado manual inmediato (refuerza el automático) */}
+      {completed > 0 && (
+        <div className="fixed bottom-4 inset-x-0 z-40 flex justify-center px-4 pointer-events-none">
+          <div className="pointer-events-auto flex items-center gap-3 bg-surface/95 backdrop-blur border border-border shadow-xl rounded-full pl-4 pr-2 py-2">
+            <span className="text-xs text-muted-foreground">
+              {status === "saving" ? (
+                "Guardando…"
+              ) : status === "error" ? (
+                <span className="text-pink font-medium">Error al guardar</span>
+              ) : (
+                <>
+                  <span className="text-foreground font-semibold">{completed}</span>{" "}
+                  guardado{completed === 1 ? "" : "s"}
+                </>
+              )}
+            </span>
+            <button
+              onClick={handleSaveNow}
+              disabled={status === "saving"}
+              className="px-4 py-1.5 rounded-full text-sm font-semibold bg-accent text-accent-foreground hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Guardar ahora
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

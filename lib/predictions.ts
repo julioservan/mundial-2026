@@ -164,12 +164,18 @@ export async function deleteManyRemote(userId: string, matchIds: string[]) {
   if (error) throw error;
 }
 
-// Sube a la base los pronósticos que el usuario tuviera en local (sin cuenta).
-export async function migrateLocalToRemote(userId: string, local: PredMap) {
-  const rows = Object.entries(local).map(([matchId, e]) => toRow(userId, matchId, e));
+// Sube (upsert) todos los pronósticos del mapa de golpe. Lo usa tanto la
+// migración de local→cuenta como el botón de "Guardar" manual.
+export async function saveAllRemote(userId: string, map: PredMap) {
+  const rows = Object.entries(map).map(([matchId, e]) => toRow(userId, matchId, e));
   if (rows.length === 0) return;
   const { error } = await getSupabase()
     .from("mundial_predictions")
     .upsert(rows, { onConflict: "user_id,match_id" });
   if (error) throw error;
+}
+
+// Sube a la base los pronósticos que el usuario tuviera en local (sin cuenta).
+export async function migrateLocalToRemote(userId: string, local: PredMap) {
+  await saveAllRemote(userId, local);
 }
