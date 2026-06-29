@@ -47,6 +47,7 @@ export interface ProviderCall<T> {
 // --- Detalle de un partido (alineaciones, eventos, estadísticas) ----------
 
 export interface LineupPlayer {
+  id: number | null; // id del proveedor (para casar foto desde players)
   name: string;
   number: number | null;
   pos: string | null; // G/D/M/F
@@ -68,6 +69,7 @@ export interface MatchEvent {
   teamId: string | null;
   teamName: string;
   player: string | null;
+  playerId: number | null; // id del proveedor (para casar foto)
   assist: string | null;
   type: string; // "Goal" | "Card" | "subst" | "Var"
   detail: string; // "Normal Goal" | "Yellow Card" | ...
@@ -81,6 +83,7 @@ export interface TeamStat {
 
 // Valoración de un jugador en el partido (para el MVP / mejor del partido).
 export interface PlayerRating {
+  id: number | null; // id del proveedor (para casar foto en eventos/alineaciones)
   name: string;
   photo: string | null;
   teamId: string | null;
