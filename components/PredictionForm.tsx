@@ -72,6 +72,7 @@ export function PredictionForm({ matches }: Props) {
   // null = sin elección manual aún (se usa la pestaña por defecto).
   const [activePhase, setActivePhase] = useState<string | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
   const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const enriched = useMemo<Match[]>(
@@ -302,7 +303,7 @@ export function PredictionForm({ matches }: Props) {
   }
 
   async function handleReset() {
-    if (!confirm("¿Borrar todos los pronósticos?")) return;
+    setConfirmReset(false);
     setPicks({});
     if (user) {
       setStatus("saving");
@@ -365,8 +366,9 @@ export function PredictionForm({ matches }: Props) {
           <div className="flex items-center gap-4">
             {user && <SyncBadge status={status} />}
             <button
-              onClick={handleReset}
-              className="text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground"
+              onClick={() => setConfirmReset(true)}
+              disabled={completed === 0}
+              className="text-xs uppercase tracking-wider text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Resetear
             </button>
@@ -566,6 +568,73 @@ export function PredictionForm({ matches }: Props) {
           );
         })}
       </ul>
+
+      {confirmReset && (
+        <ResetConfirm
+          count={completed}
+          remote={Boolean(user)}
+          onCancel={() => setConfirmReset(false)}
+          onConfirm={handleReset}
+        />
+      )}
+    </div>
+  );
+}
+
+// Confirmación explícita antes de borrar TODOS los pronósticos.
+function ResetConfirm({
+  count,
+  remote,
+  onCancel,
+  onConfirm,
+}: {
+  count: number;
+  remote: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/70 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="reset-title"
+      onClick={onCancel}
+    >
+      <div
+        className="bg-surface border border-border rounded-2xl p-6 max-w-sm w-full shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 id="reset-title" className="text-lg font-bold tracking-tight mb-2">
+          ¿Borrar todos tus pronósticos?
+        </h3>
+        <p className="text-sm text-muted-foreground mb-1">
+          Se eliminarán tus{" "}
+          <span className="font-semibold text-foreground">
+            {count} pronóstico{count === 1 ? "" : "s"}
+          </span>{" "}
+          de <span className="text-foreground">todos los partidos</span> (grupos y
+          eliminatorias).
+        </p>
+        <p className="text-sm text-pink font-medium mb-5">
+          Esta acción no se puede deshacer.
+          {!remote && " (Se borran de este navegador.)"}
+        </p>
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 rounded-lg text-sm font-semibold border border-border hover:bg-surface-muted transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 rounded-lg text-sm font-semibold bg-pink text-white hover:opacity-90 transition-opacity"
+          >
+            Sí, borrar todo
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
