@@ -35,6 +35,7 @@ export default function MatchDetailPage() {
   const [detail, setDetail] = useState<MatchDetail | null>(null);
   const [info, setInfo] = useState<{
     status?: string;
+    kickoff?: string | null;
     home?: number | null;
     away?: number | null;
     homeTeamId?: string | null;
@@ -61,6 +62,7 @@ export default function MatchDetailPage() {
     if (mi && mi.found) {
       setInfo({
         status: mi.status,
+        kickoff: mi.kickoff ?? null,
         home: mi.home,
         away: mi.away,
         homeTeamId: mi.homeTeamId,
@@ -147,6 +149,8 @@ export default function MatchDetailPage() {
 
   const homeTeamId = info?.homeTeamId ?? match.homeTeamId;
   const awayTeamId = info?.awayTeamId ?? match.awayTeamId;
+  // Hora real del feed; el calendario estático de eliminatorias es placeholder.
+  const kickoff = info?.kickoff ?? match.kickoff;
   const home = getTeam(homeTeamId);
   const away = getTeam(awayTeamId);
   const finished = Boolean(result && result.home !== "" && result.away !== "");
@@ -154,14 +158,14 @@ export default function MatchDetailPage() {
   const hasLiveScore = info != null && info.home != null && info.away != null;
   const byPick = (p: Pick) => picks.filter((e) => e.pick === p);
 
-  // Partido con los equipos reales (incluye eliminatoria una vez asignada).
-  const enrichedMatch = { ...match, homeTeamId, awayTeamId };
+  // Partido con los equipos y la hora reales (eliminatoria una vez asignada).
+  const enrichedMatch = { ...match, homeTeamId, awayTeamId, kickoff };
   // Cerrado para pronosticar si ya empezó/terminó o aún no hay rivales.
   const started =
     finished ||
     isLive ||
     info?.status === "finished" ||
-    now >= Date.parse(match.kickoff);
+    now >= Date.parse(kickoff);
   const predLocked = started || !homeTeamId || !awayTeamId;
 
   return (
@@ -178,7 +182,7 @@ export default function MatchDetailPage() {
         <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground text-center mb-4 font-semibold">
           {match.group ? `Grupo ${match.group}` : stageLabel(match.stage)}
           {match.matchday ? ` · Jornada ${match.matchday}` : ""} ·{" "}
-          <LocalTime iso={match.kickoff} />
+          <LocalTime iso={kickoff} />
         </div>
         {isLive && (
           <div className="text-center mb-3">

@@ -39,7 +39,9 @@ export async function GET(
   // Estado + id externo + equipos + marcador en vivo del snapshot (si existe).
   const { data: fix } = await supabase
     .from("mundial_fixtures")
-    .select("external_id, status, home_team_id, away_team_id, home_score, away_score")
+    .select(
+      "external_id, status, home_team_id, away_team_id, home_score, away_score, kickoff",
+    )
     .eq("match_id", id)
     .maybeSingle();
 
@@ -47,6 +49,8 @@ export async function GET(
   const awayId = (fix?.away_team_id as string) ?? staticMatch?.awayTeamId ?? null;
   const status = (fix?.status as string) ?? "scheduled";
   const externalId = (fix?.external_id as number) ?? null;
+  // Hora real del feed; el calendario estático de eliminatorias es placeholder.
+  const kickoff = (fix?.kickoff as string | null) ?? staticMatch?.kickoff ?? null;
 
   // Caché actual.
   const { data: cached } = await supabase
@@ -81,6 +85,7 @@ export async function GET(
     {
       found: Boolean(detail) || Boolean(fix),
       status,
+      kickoff,
       homeTeamId: homeId,
       awayTeamId: awayId,
       // Marcador EN VIVO (null si no ha empezado); el final está en mundial_results.
