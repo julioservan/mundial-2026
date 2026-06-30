@@ -45,6 +45,14 @@ const ORDER: string[] = [
   KNOCKOUT_SLOTS.final,
 ];
 
+// Posición de cada cruce de 16avos en el CUADRO oficial (no por horario de
+// sincronización). Reordena los slots para que avancen juntos los
+// emparejamientos correctos. Los equipos y resultados siguen viniendo del feed
+// por su id de slot; aquí solo cambia en qué rama del cuadro va cada uno.
+const R32_BRACKET_ORDER: string[] = [
+  3, 6, 1, 4, 12, 11, 10, 9, 2, 5, 7, 8, 15, 14, 13, 16,
+].map((n) => `K-round32-${n}`);
+
 // Fases de la eliminatoria, de la más temprana a la final, para el desglose.
 const PHASES: { key: string; label: string; ids: string[]; roundIdx: number }[] =
   [
@@ -258,7 +266,7 @@ export function SimuladorBracket() {
 
   // Construye las rondas propagando los ganadores elegidos.
   const rounds = useMemo<SimRound[]>(() => {
-    const r32: SimMatch[] = KNOCKOUT_SLOTS.round32.map((id) => {
+    const r32: SimMatch[] = R32_BRACKET_ORDER.map((id) => {
       const a = assignments[id];
       return {
         id,
