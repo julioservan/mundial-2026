@@ -652,6 +652,7 @@ function ResetConfirm({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const [confirmed, setConfirmed] = useState(false);
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/70 backdrop-blur-sm"
@@ -679,10 +680,22 @@ function ResetConfirm({
           Los de partidos <span className="text-foreground">ya jugados</span> se
           conservan: quedan registrados y no se pueden borrar.
         </p>
-        <p className="text-sm text-pink font-medium mb-5">
+        <p className="text-sm text-pink font-medium mb-4">
           Esta acción no se puede deshacer.
           {!remote && " (Se borran de este navegador.)"}
         </p>
+        <label className="flex items-start gap-2 mb-5 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={confirmed}
+            onChange={(e) => setConfirmed(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-pink"
+          />
+          <span className="text-sm text-foreground">
+            Confirmo que quiero borrar estos {count} pronóstico
+            {count === 1 ? "" : "s"} y entiendo que no se puede deshacer.
+          </span>
+        </label>
         <div className="flex gap-3 justify-end">
           <button
             onClick={onCancel}
@@ -692,9 +705,10 @@ function ResetConfirm({
           </button>
           <button
             onClick={onConfirm}
-            className="px-4 py-2 rounded-lg text-sm font-semibold bg-pink text-white hover:opacity-90 transition-opacity"
+            disabled={!confirmed}
+            className="px-4 py-2 rounded-lg text-sm font-semibold bg-pink text-white hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Sí, borrar todo
+            Sí, borrar
           </button>
         </div>
       </div>
