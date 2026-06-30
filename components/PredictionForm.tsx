@@ -692,8 +692,8 @@ function ResetConfirm({
             className="mt-0.5 h-4 w-4 shrink-0 accent-pink"
           />
           <span className="text-sm text-foreground">
-            Confirmo que quiero borrar estos {count} pronóstico
-            {count === 1 ? "" : "s"} y entiendo que no se puede deshacer.
+            Confirmo que soy retrasado y que quiero resetear mis {count}{" "}
+            pronóstico{count === 1 ? "" : "s"}.
           </span>
         </label>
         <div className="flex gap-3 justify-end">
@@ -708,7 +708,7 @@ function ResetConfirm({
             disabled={!confirmed}
             className="px-4 py-2 rounded-lg text-sm font-semibold bg-pink text-white hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Sí, borrar
+            Sí, que sea lo que Dios quiera
           </button>
         </div>
       </div>
