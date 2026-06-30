@@ -692,9 +692,8 @@ function ResetConfirm({
             className="mt-0.5 h-4 w-4 shrink-0 accent-pink"
           />
           <span className="text-sm text-foreground">
-            Confirmo que sé lo que hago (o eso creo) y que quiero cargarme mis{" "}
-            {count} pronóstico{count === 1 ? "" : "s"}. Si luego lloro, es culpa
-            mía.
+            Confirmo que soy retrasado y que quiero resetear mis {count}{" "}
+            pronóstico{count === 1 ? "" : "s"}.
           </span>
         </label>
         <div className="flex gap-3 justify-end">
