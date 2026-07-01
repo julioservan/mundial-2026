@@ -34,6 +34,8 @@ export default function MatchDetailPage() {
     kickoff?: string | null;
     home?: number | null;
     away?: number | null;
+    penHome?: number | null;
+    penAway?: number | null;
     homeTeamId?: string | null;
     awayTeamId?: string | null;
   } | null>(null);
@@ -71,6 +73,8 @@ export default function MatchDetailPage() {
         kickoff: mi.kickoff ?? null,
         home: mi.home,
         away: mi.away,
+        penHome: mi.penHome ?? null,
+        penAway: mi.penAway ?? null,
         homeTeamId: mi.homeTeamId,
         awayTeamId: mi.awayTeamId,
       });
@@ -289,6 +293,11 @@ export default function MatchDetailPage() {
               </span>
             ) : (
               <span className="text-2xl text-muted-foreground">vs</span>
+            )}
+            {info?.penHome != null && info?.penAway != null && (
+              <div className="font-sans text-xs text-muted-foreground mt-1.5">
+                {info.penHome}–{info.penAway} en penales
+              </div>
             )}
           </div>
           <div className="flex-1 text-left min-w-0">

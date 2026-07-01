@@ -84,8 +84,10 @@ API-Football ──> /api/sync (cron, server) ──> Supabase ──> web (lee 
    `supabase/schema.sql`, `supabase/winner-picks.sql`,
    `supabase/api-football.sql`, `supabase/match-detail.sql`,
    `supabase/knockout-scoring.sql` (puntuación enriquecida de eliminatorias:
-   ganador 1 pt + resultado exacto 3 pts) y `supabase/predictions-backup.sql`
-   (copia de seguridad diaria de pronósticos).
+   ganador 1 pt + resultado exacto 3 pts), `supabase/predictions-backup.sql`
+   (copia de seguridad diaria de pronósticos) y `supabase/penalties.sql`
+   (tanda de penales en el snapshot: sin ella el bracket no puede resolver
+   una eliminatoria que acabe en empate).
 4. **Backfill inicial** (siembra los partidos para que la web no esté vacía):
 
    ```bash

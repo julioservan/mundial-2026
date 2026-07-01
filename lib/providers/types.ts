@@ -24,6 +24,9 @@ export interface ProviderFixture {
   awayName: string | null;
   homeScore: number | null;
   awayScore: number | null;
+  // Tanda de penales (solo eliminatorias que acaban en empate; null si no hubo).
+  penHome: number | null;
+  penAway: number | null;
   status: MatchStatus;
   kickoff: string; // ISO 8601
 }

@@ -9,7 +9,9 @@ export async function fetchFixtureAssignments(): Promise<
 > {
   const { data, error } = await getSupabase()
     .from("mundial_fixtures")
-    .select("match_id, home_team_id, away_team_id, status, external_id, kickoff");
+    .select(
+      "match_id, home_team_id, away_team_id, status, external_id, kickoff, home_pen, away_pen",
+    );
   if (error) throw error;
 
   const map: Record<string, SlotAssignment> = {};
@@ -20,6 +22,8 @@ export async function fetchFixtureAssignments(): Promise<
       status: (row.status as SlotAssignment["status"]) ?? "scheduled",
       externalId: (row.external_id as number | null) ?? null,
       kickoff: (row.kickoff as string | null) ?? null,
+      penHome: (row.home_pen as number | null) ?? null,
+      penAway: (row.away_pen as number | null) ?? null,
     };
   }
   return map;

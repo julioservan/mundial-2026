@@ -38,11 +38,14 @@ function Side({
   teamId,
   fromLabel,
   score,
+  pen,
   winner,
 }: {
   teamId: string | null;
   fromLabel: string | null;
   score: number | null;
+  /** Goles en la tanda de penales, si la hubo. */
+  pen: number | null;
   winner: boolean;
 }) {
   const team = getTeam(teamId);
@@ -60,8 +63,9 @@ function Side({
           </span>
         )}
       </span>
-      <span className="font-mono text-muted-foreground text-xs w-4 text-right">
+      <span className="font-mono text-muted-foreground text-xs text-right">
         {score ?? "–"}
+        {pen != null && <span className="text-[10px]"> ({pen})</span>}
       </span>
     </div>
   );
@@ -90,12 +94,14 @@ function Card({ m }: { m: BracketMatch }) {
           teamId={m.homeTeamId}
           fromLabel={m.homeFrom}
           score={m.homeScore}
+          pen={m.homePen}
           winner={m.winnerTeamId != null && m.winnerTeamId === m.homeTeamId}
         />
         <Side
           teamId={m.awayTeamId}
           fromLabel={m.awayFrom}
           score={m.awayScore}
+          pen={m.awayPen}
           winner={m.winnerTeamId != null && m.winnerTeamId === m.awayTeamId}
         />
       </div>

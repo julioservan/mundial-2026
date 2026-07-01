@@ -137,6 +137,8 @@ interface FixtureRow {
   away_team_id: string | null;
   home_score: number | null;
   away_score: number | null;
+  home_pen: number | null;
+  away_pen: number | null;
   status: string;
   kickoff: string;
 }
@@ -182,6 +184,9 @@ export function mapFixtures(fixtures: ProviderFixture[]): {
         away_team_id: ours.away,
         home_score: home,
         away_score: away,
+        // En fase de grupos no hay tanda de penales.
+        home_pen: null,
+        away_pen: null,
         status: f.status,
         kickoff: f.kickoff,
       });
@@ -215,6 +220,8 @@ export function mapFixtures(fixtures: ProviderFixture[]): {
         away_team_id: f.awayTeamId,
         home_score: f.homeScore,
         away_score: f.awayScore,
+        home_pen: f.penHome,
+        away_pen: f.penAway,
         status: f.status,
         kickoff: f.kickoff,
       });

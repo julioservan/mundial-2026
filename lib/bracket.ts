@@ -35,6 +35,9 @@ export interface SlotAssignment {
   // Hora real del partido desde el feed (las de eliminatoria del calendario
   // estático son solo placeholders hasta que se conoce el cruce).
   kickoff?: string | null;
+  // Tanda de penales (feed): desempata cuando el marcador queda igualado.
+  penHome?: number | null;
+  penAway?: number | null;
 }
 
 export interface BracketMatch {
@@ -45,6 +48,9 @@ export interface BracketMatch {
   homeScore: number | null;
   awayScore: number | null;
   status: MatchStatus;
+  // Tanda de penales, si la hubo (para mostrarla y para decidir el ganador).
+  homePen: number | null;
+  awayPen: number | null;
   winnerTeamId: string | null;
   /** Etiqueta de origen cuando el equipo aún no se conoce (p. ej. "G16avos 3"). */
   homeFrom: string | null;
@@ -74,9 +80,21 @@ function decide(
   away: string | null,
   h: number | null,
   a: number | null,
+  penH: number | null = null,
+  penA: number | null = null,
 ): { winner: string | null; loser: string | null } {
-  if (home == null || away == null || h == null || a == null || h === a) {
+  if (home == null || away == null || h == null || a == null) {
     return { winner: null, loser: null };
+  }
+  // Empate: en eliminatorias se resuelve con la tanda de penales (si la
+  // conocemos); si no, el ganador queda pendiente.
+  if (h === a) {
+    if (penH == null || penA == null || penH === penA) {
+      return { winner: null, loser: null };
+    }
+    return penH > penA
+      ? { winner: home, loser: away }
+      : { winner: away, loser: home };
   }
   return h > a
     ? { winner: home, loser: away }
@@ -109,7 +127,9 @@ export function computeBracket(input: BracketInput): {
     const projected =
       projectedHint && !(asg?.homeTeamId || asg?.awayTeamId);
     const { h, a } = scoreOf(results, id);
-    const { winner } = decide(home, away, h, a);
+    const penH = asg?.penHome ?? null;
+    const penA = asg?.penAway ?? null;
+    const { winner } = decide(home, away, h, a, penH, penA);
     const status: MatchStatus =
       asg?.status ?? (winner ? "finished" : "scheduled");
     const m: BracketMatch = {
@@ -119,6 +139,8 @@ export function computeBracket(input: BracketInput): {
       awayTeamId: away,
       homeScore: h,
       awayScore: a,
+      homePen: penH,
+      awayPen: penA,
       status,
       winnerTeamId: winner,
       homeFrom: home ? null : homeFrom,
@@ -190,10 +212,24 @@ export function computeBracket(input: BracketInput): {
 
   // --- Tercer puesto: perdedores de las semifinales. ---
   const sf0 = sf[0]
-    ? decide(sf[0].homeTeamId, sf[0].awayTeamId, sf[0].homeScore, sf[0].awayScore)
+    ? decide(
+        sf[0].homeTeamId,
+        sf[0].awayTeamId,
+        sf[0].homeScore,
+        sf[0].awayScore,
+        sf[0].homePen,
+        sf[0].awayPen,
+      )
     : { winner: null, loser: null };
   const sf1 = sf[1]
-    ? decide(sf[1].homeTeamId, sf[1].awayTeamId, sf[1].homeScore, sf[1].awayScore)
+    ? decide(
+        sf[1].homeTeamId,
+        sf[1].awayTeamId,
+        sf[1].homeScore,
+        sf[1].awayScore,
+        sf[1].homePen,
+        sf[1].awayPen,
+      )
     : { winner: null, loser: null };
   const third = build(
     slots.third_place,
