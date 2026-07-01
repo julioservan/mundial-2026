@@ -34,7 +34,12 @@ const SCORERS_INTERVAL_MIN = Number(process.env.APIFOOTBALL_SCORERS_MIN ?? 180);
 const WINDOW_PRE_MS = 5 * 60_000;
 const WINDOW_POST_MS = 140 * 60_000;
 
-export type SyncMode = "auto" | "live" | "full";
+export const SYNC_MODES = ["auto", "live", "full"] as const;
+export type SyncMode = (typeof SYNC_MODES)[number];
+
+export function isSyncMode(v: string): v is SyncMode {
+  return (SYNC_MODES as readonly string[]).includes(v);
+}
 
 export interface SyncSummary {
   ok: boolean;

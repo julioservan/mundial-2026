@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { MATCHES } from "@/lib/data/matches";
-import { runSync, type SyncMode } from "@/lib/sync";
+import { runSync, isSyncMode } from "@/lib/sync";
 import { maybeBackup } from "@/lib/backup";
+import { isCronAuthorized } from "@/lib/api/cron-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -13,20 +14,19 @@ export const maxDuration = 30;
 //   auto -> sync completa si toca (cada ~30 min) + en vivo si hay partidos
 //   live -> solo marcadores en vivo
 //   full -> recarga todos los partidos (terminados, nuevos cruces…)
-export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const url = new URL(req.url);
-    const provided =
-      req.headers.get("authorization")?.replace("Bearer ", "") ??
-      url.searchParams.get("secret");
-    if (provided !== secret) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    }
+export async function GET(req: NextRequest) {
+  if (!isCronAuthorized(req)) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const params = new URL(req.url).searchParams;
-  const mode = (params.get("mode") ?? "auto") as SyncMode;
+  const params = req.nextUrl.searchParams;
+  const mode = params.get("mode") ?? "auto";
+  if (!isSyncMode(mode)) {
+    return NextResponse.json(
+      { error: `mode inválido: "${mode}" (usa auto | live | full)` },
+      { status: 400 },
+    );
+  }
   const refresh = params.get("refresh") === "1";
   const kickoffs = MATCHES.map((m) => m.kickoff);
 

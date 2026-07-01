@@ -34,6 +34,14 @@ export async function GET(
 ) {
   const { id } = await params;
   const staticMatch = MATCHES.find((m) => m.id === id);
+  // Todo id válido está en el calendario estático (el poller solo escribe ids
+  // nuestros): un id desconocido es un 404 sin gastar consultas.
+  if (!staticMatch) {
+    return NextResponse.json(
+      { found: false, error: "Partido desconocido" },
+      { status: 404 },
+    );
+  }
   const supabase = getSupabaseAdmin();
 
   // Estado + id externo + equipos + marcador en vivo del snapshot (si existe).
