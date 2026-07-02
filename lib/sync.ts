@@ -226,10 +226,13 @@ export function mapFixtures(fixtures: ProviderFixture[]): {
         kickoff: f.kickoff,
       });
       if (f.status === "finished" && f.homeScore != null && f.awayScore != null) {
+        // La quiniela puntúa contra el resultado A LOS 90' (el feed reporta en
+        // `goals` el marcador con prórroga incluida, que NO es el que puntúa).
+        // Quién pasa de ronda lo decide el bracket con el marcador final + penales.
         resultRows.push({
           match_id: id,
-          home_score: f.homeScore,
-          away_score: f.awayScore,
+          home_score: f.ftHome ?? f.homeScore,
+          away_score: f.ftAway ?? f.awayScore,
         });
       }
     });

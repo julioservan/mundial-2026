@@ -85,5 +85,36 @@ const b5 = computeBracket({
 });
 eq("empate sin penales = sin campeón", b5.champion, null);
 
+// Prórroga: el oficial de los 90' queda 1-1 (contra ese puntúa la quiniela)
+// pero el feed trae el final 2-1; el cruce se resuelve sin penales.
+const b6 = computeBracket({
+  slots,
+  results: { ...results, "QF-1": { home: 1, away: 1 } },
+  seed,
+  assignments: { "QF-1": { status: "finished", homeScore: 2, awayScore: 1 } },
+});
+eq("la prórroga decide el cruce", b6.byId["SF-1"].homeTeamId, "t1");
+eq(
+  "se muestra el final con prórroga",
+  [b6.byId["QF-1"].homeScore, b6.byId["QF-1"].awayScore],
+  [2, 1],
+);
+
+// Un marcador EN VIVO del feed no propaga ganador (el partido no ha acabado).
+const liveResults = { ...results };
+delete liveResults["QF-1"];
+const b7 = computeBracket({
+  slots,
+  results: liveResults,
+  seed,
+  assignments: { "QF-1": { status: "live", homeScore: 1, awayScore: 0 } },
+});
+eq("marcador en vivo no propaga", b7.byId["SF-1"].homeTeamId, null);
+eq(
+  "pero sí se muestra en la llave",
+  [b7.byId["QF-1"].homeScore, b7.byId["QF-1"].awayScore],
+  [1, 0],
+);
+
 console.log(failed === 0 ? "\nBRACKET: TODO OK" : `\nBRACKET: ${failed} FALLOS`);
 if (failed) process.exit(1);
