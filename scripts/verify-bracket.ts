@@ -61,5 +61,29 @@ const b3 = computeBracket({ slots, results: {} });
 eq("R32 sin datos = TBD", b3.byId["R32-1"].homeTeamId, null);
 eq("etiqueta de origen", b3.byId["R16-1"].homeFrom, "Ganador 16avos 1");
 
+// Empates que se resuelven en la tanda de penales (vía assignments del feed).
+// SF-1 acaba 1-1 y la gana el visitante 3-4; la final acaba 2-2 y la gana el
+// local 5-4.
+const b4 = computeBracket({
+  slots,
+  results: { ...results, "SF-1": { home: 1, away: 1 }, F: { home: 2, away: 2 } },
+  seed,
+  assignments: {
+    "SF-1": { penHome: 3, penAway: 4 },
+    F: { penHome: 5, penAway: 4 },
+  },
+});
+eq("penales deciden la semifinal", b4.byId["F"].homeTeamId, "t9");
+eq("perdedor por penales al 3er puesto", b4.byId["TP"].homeTeamId, "t1");
+eq("campeón por penales", b4.champion, "t9");
+
+// Empate sin tanda conocida -> ganador pendiente (no se inventa).
+const b5 = computeBracket({
+  slots,
+  results: { ...results, F: { home: 2, away: 2 } },
+  seed,
+});
+eq("empate sin penales = sin campeón", b5.champion, null);
+
 console.log(failed === 0 ? "\nBRACKET: TODO OK" : `\nBRACKET: ${failed} FALLOS`);
 if (failed) process.exit(1);

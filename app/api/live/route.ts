@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { getSupabaseAnonServer } from "@/lib/supabase/anon-server";
 
 export const dynamic = "force-dynamic";
 
@@ -7,16 +7,15 @@ export const dynamic = "force-dynamic";
 // que el poller (/api/sync) ya persistió en `mundial_fixtures`, de modo que una
 // carga de página NUNCA llama a la API externa.
 export async function GET() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return NextResponse.json({ matches: [] });
+  const supabase = getSupabaseAnonServer();
+  if (!supabase) return NextResponse.json({ matches: [] });
 
   try {
-    const supabase = createClient(url, key, { auth: { persistSession: false } });
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("mundial_fixtures")
       .select("match_id, home_score, away_score, status")
       .in("status", ["live", "finished"]);
+    if (error) throw new Error(error.message);
 
     const matches = (data ?? [])
       .filter((m) => m.home_score != null && m.away_score != null)
@@ -30,9 +29,20 @@ export async function GET() {
 
     return NextResponse.json(
       { matches },
-      { headers: { "Cache-Control": "public, max-age=30" } },
+      {
+        headers: {
+          // Cacheable también en el CDN (s-maxage) y con "sirve lo viejo
+          // mientras revalida": absorbe ráfagas sin dar datos rancios.
+          "Cache-Control":
+            "public, max-age=15, s-maxage=15, stale-while-revalidate=30",
+        },
+      },
     );
   } catch {
-    return NextResponse.json({ matches: [] });
+    // Fallo transitorio: respuesta vacía sin cachear, para reintentar pronto.
+    return NextResponse.json(
+      { matches: [] },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   }
 }

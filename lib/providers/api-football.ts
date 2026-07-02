@@ -125,6 +125,8 @@ interface ApiFixture {
   league: { round: string };
   teams: { home: { name: string }; away: { name: string } };
   goals: { home: number | null; away: number | null };
+  // `goals` NO incluye la tanda de penales; esta viene desglosada en `score`.
+  score?: { penalty?: { home: number | null; away: number | null } };
 }
 
 function mapFixture(f: ApiFixture): ProviderFixture {
@@ -138,6 +140,8 @@ function mapFixture(f: ApiFixture): ProviderFixture {
     awayName: f.teams.away.name,
     homeScore: f.goals.home,
     awayScore: f.goals.away,
+    penHome: f.score?.penalty?.home ?? null,
+    penAway: f.score?.penalty?.away ?? null,
     status: shortToStatus(f.fixture.status.short),
     kickoff: f.fixture.date,
   };

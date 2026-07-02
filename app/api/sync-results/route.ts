@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { MATCHES } from "@/lib/data/matches";
 import { runSync } from "@/lib/sync";
+import { isCronAuthorized } from "@/lib/api/cron-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -9,15 +10,8 @@ export const maxDuration = 30;
 // configurados. Ahora delega en el motor de sincronización (API-Football) en
 // lugar de leer worldcup26.ir directamente.
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const url = new URL(req.url);
-    const provided =
-      req.headers.get("authorization")?.replace("Bearer ", "") ??
-      url.searchParams.get("secret");
-    if (provided !== secret) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    }
+  if (!isCronAuthorized(req)) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
   try {

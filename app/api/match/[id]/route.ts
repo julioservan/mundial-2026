@@ -34,13 +34,21 @@ export async function GET(
 ) {
   const { id } = await params;
   const staticMatch = MATCHES.find((m) => m.id === id);
+  // Todo id válido está en el calendario estático (el poller solo escribe ids
+  // nuestros): un id desconocido es un 404 sin gastar consultas.
+  if (!staticMatch) {
+    return NextResponse.json(
+      { found: false, error: "Partido desconocido" },
+      { status: 404 },
+    );
+  }
   const supabase = getSupabaseAdmin();
 
   // Estado + id externo + equipos + marcador en vivo del snapshot (si existe).
   const { data: fix } = await supabase
     .from("mundial_fixtures")
     .select(
-      "external_id, status, home_team_id, away_team_id, home_score, away_score, kickoff",
+      "external_id, status, home_team_id, away_team_id, home_score, away_score, home_pen, away_pen, kickoff",
     )
     .eq("match_id", id)
     .maybeSingle();
@@ -103,6 +111,9 @@ export async function GET(
       // Marcador EN VIVO (null si no ha empezado); el final está en mundial_results.
       home: fix?.home_score ?? null,
       away: fix?.away_score ?? null,
+      // Tanda de penales (solo eliminatorias que acabaron en empate).
+      penHome: fix?.home_pen ?? null,
+      penAway: fix?.away_pen ?? null,
       detail: detail ?? null,
       preview: detail?.preview ?? null,
       homeScorers: sc.home,

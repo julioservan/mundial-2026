@@ -34,7 +34,12 @@ const SCORERS_INTERVAL_MIN = Number(process.env.APIFOOTBALL_SCORERS_MIN ?? 180);
 const WINDOW_PRE_MS = 5 * 60_000;
 const WINDOW_POST_MS = 140 * 60_000;
 
-export type SyncMode = "auto" | "live" | "full";
+export const SYNC_MODES = ["auto", "live", "full"] as const;
+export type SyncMode = (typeof SYNC_MODES)[number];
+
+export function isSyncMode(v: string): v is SyncMode {
+  return (SYNC_MODES as readonly string[]).includes(v);
+}
 
 export interface SyncSummary {
   ok: boolean;
@@ -132,6 +137,8 @@ interface FixtureRow {
   away_team_id: string | null;
   home_score: number | null;
   away_score: number | null;
+  home_pen: number | null;
+  away_pen: number | null;
   status: string;
   kickoff: string;
 }
@@ -177,6 +184,9 @@ export function mapFixtures(fixtures: ProviderFixture[]): {
         away_team_id: ours.away,
         home_score: home,
         away_score: away,
+        // En fase de grupos no hay tanda de penales.
+        home_pen: null,
+        away_pen: null,
         status: f.status,
         kickoff: f.kickoff,
       });
@@ -210,6 +220,8 @@ export function mapFixtures(fixtures: ProviderFixture[]): {
         away_team_id: f.awayTeamId,
         home_score: f.homeScore,
         away_score: f.awayScore,
+        home_pen: f.penHome,
+        away_pen: f.penAway,
         status: f.status,
         kickoff: f.kickoff,
       });

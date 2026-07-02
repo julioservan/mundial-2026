@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { backupPredictions } from "@/lib/backup";
+import { isCronAuthorized } from "@/lib/api/cron-auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -8,15 +9,8 @@ export const maxDuration = 30;
 // Protegido con CRON_SECRET, igual que /api/sync. Puedes apuntar aquí un cron
 // externo diario, además del backup automático que ya hace /api/sync.
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const url = new URL(req.url);
-    const provided =
-      req.headers.get("authorization")?.replace("Bearer ", "") ??
-      url.searchParams.get("secret");
-    if (provided !== secret) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    }
+  if (!isCronAuthorized(req)) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
   try {
