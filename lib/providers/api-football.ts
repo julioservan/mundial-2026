@@ -124,9 +124,13 @@ interface ApiFixture {
   fixture: { id: number; date: string; status: { short: string } };
   league: { round: string };
   teams: { home: { name: string }; away: { name: string } };
+  // `goals` incluye la prórroga pero NO la tanda de penales. El desglose por
+  // fases (90 minutos / prórroga / penales) viene en `score`.
   goals: { home: number | null; away: number | null };
-  // `goals` NO incluye la tanda de penales; esta viene desglosada en `score`.
-  score?: { penalty?: { home: number | null; away: number | null } };
+  score?: {
+    fulltime?: { home: number | null; away: number | null };
+    penalty?: { home: number | null; away: number | null };
+  };
 }
 
 function mapFixture(f: ApiFixture): ProviderFixture {
@@ -140,6 +144,8 @@ function mapFixture(f: ApiFixture): ProviderFixture {
     awayName: f.teams.away.name,
     homeScore: f.goals.home,
     awayScore: f.goals.away,
+    ftHome: f.score?.fulltime?.home ?? null,
+    ftAway: f.score?.fulltime?.away ?? null,
     penHome: f.score?.penalty?.home ?? null,
     penAway: f.score?.penalty?.away ?? null,
     status: shortToStatus(f.fixture.status.short),

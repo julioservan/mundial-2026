@@ -24,6 +24,10 @@ export interface ProviderFixture {
   awayName: string | null;
   homeScore: number | null;
   awayScore: number | null;
+  // Marcador a los 90' (sin prórroga). En un partido sin prórroga coincide con
+  // el final; la quiniela puntúa SIEMPRE contra este. Null hasta el descanso final.
+  ftHome: number | null;
+  ftAway: number | null;
   // Tanda de penales (solo eliminatorias que acaban en empate; null si no hubo).
   penHome: number | null;
   penAway: number | null;

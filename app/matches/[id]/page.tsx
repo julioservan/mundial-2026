@@ -182,6 +182,12 @@ export default function MatchDetailPage() {
   const home = getTeam(homeTeamId);
   const away = getTeam(awayTeamId);
   const finished = Boolean(result && result.home !== "" && result.away !== "");
+  // Hubo prórroga si el marcador final del feed difiere del oficial a los 90'.
+  const wentToExtra =
+    finished &&
+    info?.home != null &&
+    info?.away != null &&
+    (String(info.home) !== result!.home || String(info.away) !== result!.away);
 
   // Goleadores derivados de la cronología (también respaldan el marcador).
   const goalEvents = (detail?.events ?? []).filter(
@@ -284,8 +290,10 @@ export default function MatchDetailPage() {
           </div>
           <div className="shrink-0 font-display leading-none px-2 text-center">
             {finished ? (
+              // Marcador final del feed (con prórroga); si no hay snapshot,
+              // el oficial de results (que es el de los 90').
               <span className="text-4xl text-foreground">
-                {result!.home}–{result!.away}
+                {info?.home ?? result!.home}–{info?.away ?? result!.away}
               </span>
             ) : isLive ? (
               <span className="text-4xl text-pink">
@@ -293,6 +301,11 @@ export default function MatchDetailPage() {
               </span>
             ) : (
               <span className="text-2xl text-muted-foreground">vs</span>
+            )}
+            {wentToExtra && (
+              <div className="font-sans text-xs text-muted-foreground mt-1.5">
+                tras prórroga ({result!.home}–{result!.away} a los 90&apos;)
+              </div>
             )}
             {info?.penHome != null && info?.penAway != null && (
               <div className="font-sans text-xs text-muted-foreground mt-1.5">
