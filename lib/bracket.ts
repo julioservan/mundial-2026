@@ -106,6 +106,28 @@ function decide(
     : { winner: away, loser: home };
 }
 
+// Ganador REAL de un cruce, con la misma lógica que el cuadro: marcador final
+// del feed (con prórroga) o, en su defecto, el oficial de results (90'), y la
+// tanda de penales como desempate. Null si no ha terminado o no se sabe.
+// Lo usa el Simulador para fijar los cruces ya jugados.
+export function actualWinnerOf(
+  asg: SlotAssignment | undefined,
+  result: { home: number; away: number } | undefined,
+): string | null {
+  const home = asg?.homeTeamId ?? null;
+  const away = asg?.awayTeamId ?? null;
+  if (!home || !away) return null;
+  const finished =
+    asg?.status == null ? result != null : asg.status === "finished";
+  if (!finished) return null;
+  const sh = asg?.homeScore ?? null;
+  const sa = asg?.awayScore ?? null;
+  const h = sh != null && sa != null ? sh : (result?.home ?? null);
+  const a = sh != null && sa != null ? sa : (result?.away ?? null);
+  return decide(home, away, h, a, asg?.penHome ?? null, asg?.penAway ?? null)
+    .winner;
+}
+
 export function computeBracket(input: BracketInput): {
   byStage: Record<MatchStage, BracketMatch[]>;
   byId: Record<string, BracketMatch>;
