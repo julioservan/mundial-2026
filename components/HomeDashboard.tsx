@@ -63,31 +63,14 @@ export function HomeDashboard() {
     async function load() {
       try {
         const supabase = getSupabase();
-        const [r, b, picksRes, profsRes] = await Promise.all([
+        const [r, b, profsRes] = await Promise.all([
           fetchResults(),
           fetchLeaderboard(),
-          supabase
-            .from("mundial_predictions")
-            .select("user_id, match_id, pick, home_score, away_score, advance"),
           supabase.from("mundial_profiles").select("id, username, avatar_url"),
         ]);
         if (!active) return;
         setResults(r);
         setBoard(b);
-
-        const byMatch: PicksByMatch = {};
-        for (const row of picksRes.data ?? []) {
-          if (!row.pick) continue;
-          const id = row.match_id as string;
-          (byMatch[id] ??= []).push({
-            userId: row.user_id as string,
-            pick: row.pick as Pick,
-            home: row.home_score != null ? String(row.home_score) : "",
-            away: row.away_score != null ? String(row.away_score) : "",
-            advance: (row.advance as "home" | "away" | null) ?? null,
-          });
-        }
-        setPicksByMatch(byMatch);
 
         const profs: Record<string, PlayerLite> = {};
         for (const p of profsRes.data ?? []) {
@@ -202,6 +185,42 @@ export function HomeDashboard() {
 
   const myIndex = board.findIndex((e) => e.userId === user?.id);
   const top = board.slice(0, 5);
+
+  // Pronósticos SOLO de los partidos que se muestran. Ojo: pedir la tabla
+  // entera (como antes) choca con el tope de 1000 filas por consulta de
+  // Supabase y deja fuera los pronósticos de los partidos visibles.
+  const shownKey = [...live, ...nextOfDay]
+    .map((m) => m.id)
+    .sort()
+    .join(",");
+  useEffect(() => {
+    // Sin partidos visibles no hay nada que pedir (ni que pintar).
+    if (!shownKey) return;
+    let active = true;
+    getSupabase()
+      .from("mundial_predictions")
+      .select("user_id, match_id, pick, home_score, away_score, advance")
+      .in("match_id", shownKey.split(","))
+      .then(({ data }) => {
+        if (!active) return;
+        const byMatch: PicksByMatch = {};
+        for (const row of data ?? []) {
+          if (!row.pick) continue;
+          const id = row.match_id as string;
+          (byMatch[id] ??= []).push({
+            userId: row.user_id as string,
+            pick: row.pick as Pick,
+            home: row.home_score != null ? String(row.home_score) : "",
+            away: row.away_score != null ? String(row.away_score) : "",
+            advance: (row.advance as "home" | "away" | null) ?? null,
+          });
+        }
+        setPicksByMatch(byMatch);
+      });
+    return () => {
+      active = false;
+    };
+  }, [shownKey]);
 
   function renderMatch(matchId: string, isLive: boolean) {
     const match = matchById[matchId];
