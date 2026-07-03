@@ -378,16 +378,12 @@ export function SimuladorBracket() {
           b.hits - a.hits ||
           a.username.localeCompare(b.username, "es", { sensitivity: "base" }),
       );
-    // Puesto compartido en caso de empate a aciertos.
-    let rank = 0;
-    let prevHits = -1;
-    return evaluated.map((f, i) => {
-      if (f.hits !== prevHits) {
-        rank = i + 1;
-        prevHits = f.hits;
-      }
-      return { ...f, rank };
-    });
+    // Puesto compartido en caso de empate a aciertos: el de la primera
+    // aparición de ese número de aciertos en la lista ya ordenada.
+    return evaluated.map((f) => ({
+      ...f,
+      rank: evaluated.findIndex((x) => x.hits === f.hits) + 1,
+    }));
   }, [friends, assignments, actualWinners]);
 
   // Posiciona conectores y nodos del cuadro radial.
