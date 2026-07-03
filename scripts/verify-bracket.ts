@@ -1,6 +1,11 @@
 // Verificación del motor de eliminatoria (lib/bracket.ts).
 // Ejecuta: npm test
-import { computeBracket, type KnockoutSlots, type BracketInput } from "@/lib/bracket";
+import {
+  computeBracket,
+  actualWinnerOf,
+  type KnockoutSlots,
+  type BracketInput,
+} from "@/lib/bracket";
 
 let failed = 0;
 function eq(name: string, got: unknown, want: unknown) {
@@ -114,6 +119,45 @@ eq(
   "pero sí se muestra en la llave",
   [b7.byId["QF-1"].homeScore, b7.byId["QF-1"].awayScore],
   [1, 0],
+);
+
+// actualWinnerOf (lo usa el Simulador para fijar los cruces ya jugados).
+eq(
+  "ganador real con prórroga",
+  actualWinnerOf(
+    { homeTeamId: "A", awayTeamId: "B", status: "finished", homeScore: 2, awayScore: 1 },
+    { home: 1, away: 1 },
+  ),
+  "A",
+);
+eq(
+  "ganador real por penales",
+  actualWinnerOf(
+    {
+      homeTeamId: "A",
+      awayTeamId: "B",
+      status: "finished",
+      homeScore: 1,
+      awayScore: 1,
+      penHome: 3,
+      penAway: 4,
+    },
+    { home: 1, away: 1 },
+  ),
+  "B",
+);
+eq(
+  "sin ganador real en vivo",
+  actualWinnerOf(
+    { homeTeamId: "A", awayTeamId: "B", status: "live", homeScore: 1, awayScore: 0 },
+    undefined,
+  ),
+  null,
+);
+eq(
+  "sin ganador real si falta el rival",
+  actualWinnerOf({ homeTeamId: "A", awayTeamId: null, status: "finished" }, undefined),
+  null,
 );
 
 console.log(failed === 0 ? "\nBRACKET: TODO OK" : `\nBRACKET: ${failed} FALLOS`);

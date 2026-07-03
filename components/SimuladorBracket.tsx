@@ -7,9 +7,8 @@ import type { MatchStage } from "@/types";
 import { KNOCKOUT_SLOTS } from "@/lib/data/matches";
 import { getTeam } from "@/lib/data/teams";
 import { fetchFixtureAssignments } from "@/lib/fixtures";
-import type { SlotAssignment } from "@/lib/bracket";
+import { actualWinnerOf, type SlotAssignment } from "@/lib/bracket";
 import { fetchResults, type ResultMap } from "@/lib/results";
-import { winnerOf as resultWinner } from "@/lib/scoring";
 import { useAuth } from "@/lib/supabase/auth";
 import {
   fetchMySimulador,
@@ -255,13 +254,41 @@ export function SimuladorBracket() {
   // Solo se edita el cuadro propio que aún no está guardado.
   const editable = !viewing && !effectiveLocked;
 
+  // Ganador REAL de cada cruce según el feed (marcador final con prórroga +
+  // penales). Sirve para anotar aciertos y para FIJAR los cruces ya jugados.
+  const actualWinners = useMemo<Record<string, string | null>>(() => {
+    const out: Record<string, string | null> = {};
+    for (const id of ORDER) {
+      const r = results[id];
+      const numeric =
+        r && r.home !== "" && r.away !== ""
+          ? { home: Number(r.home), away: Number(r.away) }
+          : undefined;
+      out[id] = actualWinnerOf(assignments[id], numeric);
+    }
+    return out;
+  }, [assignments, results]);
+
+  // Cruces ya jugados: en el cuadro editable vienen fijados con el ganador
+  // real (se pronostica solo lo que queda por jugar). Los cuadros guardados y
+  // los de amigos se muestran tal y como se guardaron.
+  const isFixed = useCallback(
+    (m: SimMatch | null | undefined): boolean => {
+      if (!editable || !m?.home || !m?.away) return false;
+      const w = actualWinners[m.id];
+      return w === m.home || w === m.away;
+    },
+    [editable, actualWinners],
+  );
+
   const winnerOf = useCallback(
     (m: SimMatch): string | null => {
       if (!m.home || !m.away) return null;
+      if (isFixed(m)) return actualWinners[m.id];
       const p = picks[m.id];
       return p === "home" ? m.home : p === "away" ? m.away : null;
     },
-    [picks],
+    [picks, isFixed, actualWinners],
   );
 
   // Construye las rondas propagando los ganadores elegidos.
@@ -385,25 +412,30 @@ export function SimuladorBracket() {
   }, [rounds, winnerOf]);
 
   const championTeam = getTeam(graph.champion);
-  const pickedCount = ORDER.filter((id) => picks[id]).length;
-  const complete = pickedCount === ORDER.length;
 
-  // Ganador REAL de cada cruce según la API (resultado + equipos del feed).
-  // Independiente del resto de la web: solo mira cómo quedaron los partidos.
-  const actualWinners = useMemo<Record<string, string | null>>(() => {
-    const out: Record<string, string | null> = {};
-    for (const id of ORDER) {
-      const a = assignments[id];
-      const r = results[id];
-      if (!a?.homeTeamId || !a?.awayTeamId || !r) {
-        out[id] = null;
-        continue;
+  // Picks efectivos: en el cuadro editable, los cruces ya jugados van fijados
+  // al ganador real; el resto, lo que se haya elegido. Es lo que se pinta, se
+  // comparte y se guarda.
+  const effectivePicks = useMemo<Picks>(() => {
+    const out: Picks = {};
+    for (const rd of rounds) {
+      for (const m of rd.matches) {
+        if (isFixed(m)) {
+          out[m.id] = actualWinners[m.id] === m.home ? "home" : "away";
+        } else if (picks[m.id]) {
+          out[m.id] = picks[m.id];
+        }
       }
-      const w = resultWinner(Number(r.home), Number(r.away));
-      out[id] = w === "home" ? a.homeTeamId : w === "away" ? a.awayTeamId : null;
     }
     return out;
-  }, [assignments, results]);
+  }, [rounds, picks, isFixed, actualWinners]);
+
+  const pickedCount = ORDER.filter((id) => effectivePicks[id]).length;
+  const complete = pickedCount === ORDER.length;
+  const fixedCount = useMemo(
+    () => rounds.flatMap((rd) => rd.matches).filter((m) => isFixed(m)).length,
+    [rounds, isFixed],
+  );
 
   // Acierto = el equipo que pusiste como ganador del cruce ganó de verdad.
   const score = useMemo(() => {
@@ -432,7 +464,8 @@ export function SimuladorBracket() {
   }, [actualWinners, rounds, winnerOf]);
 
   function choose(parent: SimMatch, side: Side) {
-    if (!editable || !parent.home || !parent.away) return;
+    // Los cruces ya jugados están fijados al ganador real: no se tocan.
+    if (!editable || !parent.home || !parent.away || isFixed(parent)) return;
     setDraft((prev) => {
       const next = { ...prev, [parent.id]: side };
       persist(next);
@@ -454,8 +487,9 @@ export function SimuladorBracket() {
     setSaving(true);
     setSaveError(null);
     try {
-      await saveMySimulador(user.id, draft);
-      setLockedPicks(draft);
+      // Se guardan los picks efectivos: los fijados (ya jugados) incluidos.
+      await saveMySimulador(user.id, effectivePicks);
+      setLockedPicks(effectivePicks);
       setConfirmSave(false);
       // Refresca la lista de amigos para incluir el cuadro recién guardado.
       fetchAllSimuladores()
@@ -469,7 +503,7 @@ export function SimuladorBracket() {
   }
 
   async function share() {
-    const path = `/simulador?b=${encodePicks(picks)}`;
+    const path = `/simulador?b=${encodePicks(effectivePicks)}`;
     window.history.replaceState(null, "", path);
     try {
       await navigator.clipboard.writeText(`${window.location.origin}${path}`);
@@ -550,7 +584,7 @@ export function SimuladorBracket() {
             <>
               <button
                 onClick={reset}
-                disabled={pickedCount === 0}
+                disabled={pickedCount <= fixedCount}
                 className="px-4 py-2 rounded-full text-sm font-semibold border border-border text-muted-foreground hover:bg-surface-muted transition-colors disabled:opacity-40"
               >
                 Reiniciar
@@ -616,8 +650,13 @@ export function SimuladorBracket() {
 
           {/* Nodos del cuadro */}
           {graph.nodes.map((n) => {
-            const clickable = editable && Boolean(n.parent?.home && n.parent?.away);
-            const selected = n.parent ? picks[n.parent.id] === n.side : false;
+            const clickable =
+              editable &&
+              Boolean(n.parent?.home && n.parent?.away) &&
+              !isFixed(n.parent);
+            const selected = n.parent
+              ? effectivePicks[n.parent.id] === n.side
+              : false;
             return (
               <SimNode
                 key={n.id}
@@ -683,6 +722,14 @@ export function SimuladorBracket() {
           Toca el equipo que crees que pasa en cada cruce; el ganador avanza solo
           hacia el centro hasta coronar a tu campeón. {pickedCount}/{ORDER.length}{" "}
           cruces elegidos.
+          {fixedCount > 0 && (
+            <>
+              {" "}
+              Los {fixedCount === 1 ? "cruce ya jugado viene" : `${fixedCount} cruces ya jugados vienen`}{" "}
+              fijados con su ganador real y no se pueden cambiar: pronosticas
+              solo lo que queda por jugar.
+            </>
+          )}
         </p>
       )}
 
@@ -749,7 +796,7 @@ export function SimuladorBracket() {
               key={ph.key}
               label={ph.label}
               matches={rounds[ph.roundIdx].matches}
-              picks={picks}
+              picks={effectivePicks}
               actualWinners={actualWinners}
               stats={score.byPhase[ph.key]}
             />
