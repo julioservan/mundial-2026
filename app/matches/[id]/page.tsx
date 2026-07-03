@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { MATCHES } from "@/lib/data/matches";
 import { getTeam } from "@/lib/data/teams";
-import { Avatar } from "@/components/Avatar";
 import { LocalTime } from "@/components/LocalTime";
 import { getSupabase } from "@/lib/supabase/client";
 import { fetchResults } from "@/lib/results";
@@ -16,7 +15,8 @@ import { MatchPreview } from "@/components/MatchPreview";
 import { MatchPrediction } from "@/components/MatchPrediction";
 import { PlayerAvatar, initialsOf } from "@/components/PlayerAvatar";
 import type { MatchDetail, MatchEvent } from "@/lib/providers";
-import type { Pick } from "@/lib/scoring";
+import { useAuth } from "@/lib/supabase/auth";
+import { PeoplePicks, mapVoterPicks, type VoterPick } from "@/components/PeoplePicks";
 
 type PlayerLite = ProfileLite;
 
@@ -25,7 +25,8 @@ export default function MatchDetailPage() {
   const id = String(params.id);
   const match = useMemo(() => MATCHES.find((m) => m.id === id), [id]);
 
-  const [picks, setPicks] = useState<{ userId: string; pick: Pick }[]>([]);
+  const { user } = useAuth();
+  const [picks, setPicks] = useState<VoterPick[]>([]);
   const [players, setPlayers] = useState<Record<string, PlayerLite>>({});
   const [result, setResult] = useState<{ home: string; away: string } | null>(null);
   const [detail, setDetail] = useState<MatchDetail | null>(null);
@@ -104,13 +105,9 @@ export default function MatchDetailPage() {
   const reloadPicks = useCallback(async () => {
     const { data } = await getSupabase()
       .from("mundial_predictions")
-      .select("user_id, pick")
+      .select("user_id, pick, home_score, away_score, advance")
       .eq("match_id", id);
-    setPicks(
-      (data ?? [])
-        .filter((r) => r.pick)
-        .map((r) => ({ userId: r.user_id as string, pick: r.pick as Pick })),
-    );
+    setPicks(mapVoterPicks(data ?? []));
   }, [id]);
 
   useEffect(() => {
@@ -122,16 +119,12 @@ export default function MatchDetailPage() {
         const [picksRes, profs] = await Promise.all([
           supabase
             .from("mundial_predictions")
-            .select("user_id, pick")
+            .select("user_id, pick, home_score, away_score, advance")
             .eq("match_id", id),
           fetchProfilesLite(),
         ]);
         if (active) {
-          setPicks(
-            (picksRes.data ?? [])
-              .filter((r) => r.pick)
-              .map((r) => ({ userId: r.user_id as string, pick: r.pick as Pick })),
-          );
+          setPicks(mapVoterPicks(picksRes.data ?? []));
           setPlayers(profs);
         }
       } catch {
@@ -229,8 +222,6 @@ export default function MatchDetailPage() {
         0,
       )
     : 0;
-  const byPick = (p: Pick) => picks.filter((e) => e.pick === p);
-
   // Foto de cada goleador (vía valoraciones de jugadores).
   const photoById: Record<number, string> = {};
   for (const p of detail?.players ?? []) {
@@ -365,6 +356,18 @@ export default function MatchDetailPage() {
         </div>
       </div>
 
+      {/* Pronósticos de la gente (antes de la previa) */}
+      <PeoplePicks
+        picks={picks}
+        players={players}
+        meId={user?.id ?? null}
+        home={home ?? null}
+        away={away ?? null}
+        knockout={match.stage !== "group"}
+        result={finished ? result : null}
+        loading={loading}
+      />
+
       {/* Previa: pronóstico, forma, cara a cara y bajas (antes del partido) */}
       {detail?.preview && !finished && (
         <MatchPreview
@@ -394,81 +397,7 @@ export default function MatchDetailPage() {
         result={result}
         onSaved={reloadPicks}
       />
-
-      {/* Pronósticos de la gente */}
-      <h2 className="text-xl font-bold tracking-tight mb-4">
-        Pronósticos de la gente
-      </h2>
-
-      {loading ? (
-        <p className="text-center text-muted-foreground py-8">Cargando…</p>
-      ) : picks.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          Nadie ha pronosticado este partido todavía.
-        </p>
-      ) : (
-        <div className="grid grid-cols-3 gap-3">
-          <PickColumn
-            label="Gana"
-            flag={home?.flag}
-            voters={byPick("home")}
-            players={players}
-          />
-          <PickColumn label="Empate" voters={byPick("draw")} players={players} />
-          <PickColumn
-            label="Gana"
-            flag={away?.flag}
-            voters={byPick("away")}
-            players={players}
-          />
-        </div>
-      )}
     </div>
   );
 }
 
-function PickColumn({
-  label,
-  flag,
-  voters,
-  players,
-}: {
-  label: string;
-  flag?: string;
-  voters: { userId: string }[];
-  players: Record<string, PlayerLite>;
-}) {
-  return (
-    <div className="bg-surface border border-border rounded-2xl p-3 text-center">
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 flex items-center justify-center gap-1">
-        {flag && <span aria-hidden>{flag}</span>}
-        <span>{label}</span>
-      </div>
-      <div className="font-display text-2xl text-accent leading-none mb-2">
-        {voters.length}
-      </div>
-      <div className="space-y-1.5">
-        {voters.length === 0 ? (
-          <span className="text-[11px] text-muted-foreground/40">—</span>
-        ) : (
-          voters.map((v) => {
-            const p = players[v.userId];
-            return (
-              <div key={v.userId} className="flex items-center gap-1.5 justify-center">
-                <Avatar
-                  url={p?.avatar_url ?? null}
-                  name={p?.username ?? "?"}
-                  size={18}
-                  className="text-[7px] shrink-0"
-                />
-                <span className="text-[11px] font-medium leading-tight truncate">
-                  {p?.username ?? "?"}
-                </span>
-              </div>
-            );
-          })
-        )}
-      </div>
-    </div>
-  );
-}
