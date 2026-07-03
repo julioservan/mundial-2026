@@ -45,6 +45,13 @@ async function fetchProfile(userId: string): Promise<MundialProfile | null> {
   return (data as MundialProfile) ?? null;
 }
 
+// Un correo nunca es un nombre para mostrar: nos quedamos con la parte local.
+function sanitizeUsername(raw: string | undefined | null): string | null {
+  const v = raw?.trim();
+  if (!v) return null;
+  return v.includes("@") ? v.split("@")[0] || null : v;
+}
+
 // Garantiza que exista una fila de perfil para el usuario. Lo hacemos en el
 // cliente (en vez de con un trigger sobre auth.users) para no tocar la
 // configuración del proyecto Supabase compartido.
@@ -53,12 +60,26 @@ async function ensureProfile(
   fallbackUsername?: string,
 ): Promise<MundialProfile | null> {
   const existing = await fetchProfile(user.id);
-  if (existing) return existing;
+  if (existing) {
+    // Reparación de cuentas antiguas que guardaron el correo entero como
+    // nombre de usuario: se reescribe con la parte antes de la @.
+    if (user.email && existing.username === user.email) {
+      const username = sanitizeUsername(user.email) ?? "Jugador";
+      const { data } = await getSupabase()
+        .from("mundial_profiles")
+        .update({ username })
+        .eq("id", user.id)
+        .select("id, username, avatar_url, timezone, is_admin")
+        .maybeSingle();
+      return (data as MundialProfile) ?? { ...existing, username };
+    }
+    return existing;
+  }
 
   const username =
-    fallbackUsername?.trim() ||
-    (user.user_metadata?.username as string | undefined) ||
-    user.email?.split("@")[0] ||
+    sanitizeUsername(fallbackUsername) ||
+    sanitizeUsername(user.user_metadata?.username as string | undefined) ||
+    sanitizeUsername(user.email) ||
     "Jugador";
 
   const { data, error } = await getSupabase()

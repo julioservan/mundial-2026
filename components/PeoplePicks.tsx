@@ -255,6 +255,115 @@ export function PeoplePicks({
   );
 }
 
+// Versión compacta para las tarjetas de partido de la home: barra de reparto
+// + tres mini-columnas con los votantes. Sin titulares ni tarjetas grandes.
+export function PeoplePicksCompact({
+  picks,
+  players,
+  meId,
+  home,
+  away,
+  knockout,
+}: {
+  picks: VoterPick[];
+  players: Record<string, ProfileLite>;
+  meId: string | null;
+  home: TeamLite;
+  away: TeamLite;
+  knockout: boolean;
+}) {
+  const total = picks.length;
+  if (total === 0) {
+    return (
+      <p className="text-[11px] text-muted-foreground text-center">
+        Nadie ha pronosticado este partido todavía.
+      </p>
+    );
+  }
+  const groups: { key: Pick; team: TeamLite; voters: VoterPick[] }[] = [
+    { key: "home", team: home, voters: picks.filter((p) => p.pick === "home") },
+    { key: "draw", team: null, voters: picks.filter((p) => p.pick === "draw") },
+    { key: "away", team: away, voters: picks.filter((p) => p.pick === "away") },
+  ];
+  return (
+    <div>
+      <div
+        className="flex gap-[3px] h-2 mb-3"
+        role="img"
+        aria-label={groups
+          .map(
+            (g) =>
+              `${g.team ? `Gana ${g.team.name}` : "Empate"}: ${g.voters.length}`,
+          )
+          .join(" · ")}
+      >
+        {groups
+          .filter((g) => g.voters.length > 0)
+          .map((g) => (
+            <div
+              key={g.key}
+              title={`${g.team ? `Gana ${g.team.name}` : "Empate"}: ${g.voters.length} (${Math.round((g.voters.length / total) * 100)}%)`}
+              className="rounded-full"
+              style={{
+                width: `${(g.voters.length / total) * 100}%`,
+                background: PICK_COLORS[g.key],
+              }}
+            />
+          ))}
+      </div>
+      <div className="grid grid-cols-3 gap-2 items-start">
+        {groups.map((g) => {
+          const sortedVoters = [...g.voters].sort((a, b) => {
+            const an = players[a.userId]?.username ?? "";
+            const bn = players[b.userId]?.username ?? "";
+            return an.localeCompare(bn, "es", { sensitivity: "base" });
+          });
+          return (
+            <div key={g.key} className="min-w-0">
+              <div className="flex items-center justify-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
+                <span
+                  className="w-1.5 h-1.5 rounded-full shrink-0"
+                  style={{ background: PICK_COLORS[g.key] }}
+                  aria-hidden
+                />
+                {g.team ? (
+                  <span aria-hidden>{g.team.flag}</span>
+                ) : (
+                  <span>Empate</span>
+                )}
+                <span className="text-foreground font-semibold">
+                  {g.voters.length}
+                </span>
+              </div>
+              <div className="space-y-1">
+                {sortedVoters.length === 0 ? (
+                  <div className="text-center text-[11px] text-muted-foreground/40">
+                    —
+                  </div>
+                ) : (
+                  sortedVoters.map((v) => (
+                    <VoterRow
+                      key={v.userId}
+                      v={v}
+                      p={players[v.userId]}
+                      isMe={v.userId === meId}
+                      knockout={knockout}
+                      points={null}
+                      home={home}
+                      away={away}
+                      compact
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // Fila de un jugador: avatar + nombre (+ "tú"), marcador exacto pronosticado
 // (KO), "quién pasa" si pronosticó empate y, tras el partido, sus puntos.
 function VoterRow({
@@ -265,6 +374,7 @@ function VoterRow({
   points,
   home,
   away,
+  compact = false,
 }: {
   v: VoterPick;
   p: ProfileLite | undefined;
@@ -273,6 +383,8 @@ function VoterRow({
   points: number | null; // null hasta que haya resultado
   home: TeamLite;
   away: TeamLite;
+  // En columnas estrechas (home): pastilla de marcador solo desde sm.
+  compact?: boolean;
 }) {
   // +4 en KO = clavó también el marcador exacto: fila destacada.
   const exactHit = points != null && points >= 4;
@@ -291,10 +403,12 @@ function VoterRow({
       <Avatar
         url={p?.avatar_url ?? null}
         name={p?.username ?? "?"}
-        size={20}
+        size={compact ? 18 : 20}
         className="text-[7px] shrink-0"
       />
-      <span className="text-xs font-medium truncate flex-1 min-w-0">
+      <span
+        className={`${compact ? "text-[11px]" : "text-xs"} font-medium truncate flex-1 min-w-0`}
+      >
         {p?.username ?? "?"}
         {isMe && <span className="text-accent font-bold"> · tú</span>}
       </span>
@@ -302,6 +416,8 @@ function VoterRow({
         <span
           title="Marcador pronosticado"
           className={`font-mono text-[11px] tabular-nums border rounded-md px-1.5 py-0.5 shrink-0 ${
+            compact ? "hidden sm:inline" : ""
+          } ${
             exactHit
               ? "border-accent/60 text-accent font-bold"
               : "border-border text-muted-foreground"
