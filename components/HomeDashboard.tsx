@@ -15,6 +15,7 @@ import { fetchResults, type ResultMap } from "@/lib/results";
 import { fetchFixtures, type FixtureSnapshot } from "@/lib/fixtures";
 import { fetchLeaderboard, type LiveLeaderboardEntry } from "@/lib/leaderboard";
 import type { Pick } from "@/lib/scoring";
+import { PeoplePicksCompact, type VoterPick } from "@/components/PeoplePicks";
 
 // Ventana en la que consideramos un partido "en juego" desde su inicio.
 const LIVE_MS = 135 * 60 * 1000; // 2h15m
@@ -24,7 +25,7 @@ interface PlayerLite {
   username: string;
   avatar_url: string | null;
 }
-type PicksByMatch = Record<string, { userId: string; pick: Pick }[]>;
+type PicksByMatch = Record<string, VoterPick[]>;
 
 export function HomeDashboard() {
   const { user, profile } = useAuth();
@@ -65,7 +66,9 @@ export function HomeDashboard() {
         const [r, b, picksRes, profsRes] = await Promise.all([
           fetchResults(),
           fetchLeaderboard(),
-          supabase.from("mundial_predictions").select("user_id, match_id, pick"),
+          supabase
+            .from("mundial_predictions")
+            .select("user_id, match_id, pick, home_score, away_score, advance"),
           supabase.from("mundial_profiles").select("id, username, avatar_url"),
         ]);
         if (!active) return;
@@ -79,6 +82,9 @@ export function HomeDashboard() {
           (byMatch[id] ??= []).push({
             userId: row.user_id as string,
             pick: row.pick as Pick,
+            home: row.home_score != null ? String(row.home_score) : "",
+            away: row.away_score != null ? String(row.away_score) : "",
+            advance: (row.advance as "home" | "away" | null) ?? null,
           });
         }
         setPicksByMatch(byMatch);
@@ -208,6 +214,7 @@ export function HomeDashboard() {
         score={liveScores[matchId]}
         entries={picksByMatch[matchId] ?? []}
         players={players}
+        meId={user?.id ?? null}
       />
     );
   }
@@ -339,18 +346,18 @@ function MatchRow({
   score,
   entries,
   players,
+  meId,
 }: {
   match: Match;
   live?: boolean;
   score?: { home: number; away: number; live: boolean; finished: boolean };
-  entries: { userId: string; pick: Pick }[];
+  entries: VoterPick[];
   players: Record<string, PlayerLite>;
+  meId: string | null;
 }) {
   const matchId = match.id;
   const home = getTeam(match.homeTeamId);
   const away = getTeam(match.awayTeamId);
-
-  const byPick = (p: Pick) => entries.filter((e) => e.pick === p);
 
   return (
     <li className="bg-surface border border-border rounded-2xl overflow-hidden">
@@ -429,78 +436,18 @@ function MatchRow({
           </div>
         )}
 
-      {/* Pronósticos de la gente para este partido */}
+      {/* Pronósticos de la gente para este partido (reparto + votantes) */}
       <div className="mt-3 pt-3 border-t border-border/60">
-        {entries.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground text-center">
-            Nadie ha pronosticado este partido todavía.
-          </p>
-        ) : (
-          <div className="grid grid-cols-3 gap-2 items-start">
-            <PickGroup
-              label="Gana"
-              flag={home?.flag}
-              voters={byPick("home")}
-              players={players}
-            />
-            <PickGroup label="Empate" voters={byPick("draw")} players={players} />
-            <PickGroup
-              label="Gana"
-              flag={away?.flag}
-              voters={byPick("away")}
-              players={players}
-            />
-          </div>
-        )}
+        <PeoplePicksCompact
+          picks={entries}
+          players={players}
+          meId={meId}
+          home={home ?? null}
+          away={away ?? null}
+          knockout={match.stage !== "group"}
+        />
       </div>
       </Link>
     </li>
-  );
-}
-
-function PickGroup({
-  label,
-  flag,
-  voters,
-  players,
-}: {
-  label: string;
-  flag?: string;
-  voters: { userId: string }[];
-  players: Record<string, PlayerLite>;
-}) {
-  return (
-    <div className="text-center">
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 flex items-center justify-center gap-1">
-        {flag && <span aria-hidden>{flag}</span>}
-        <span>{label}</span>
-        <span className="text-foreground font-semibold">{voters.length}</span>
-      </div>
-      <div className="space-y-1">
-        {voters.length === 0 ? (
-          <span className="text-[11px] text-muted-foreground/40">—</span>
-        ) : (
-          voters.map((v) => {
-            const p = players[v.userId];
-            return (
-              <div
-                key={v.userId}
-                className="flex items-center gap-1.5 justify-center"
-              >
-                <Avatar
-                  url={p?.avatar_url ?? null}
-                  name={p?.username ?? "?"}
-                  size={18}
-                  className="text-[7px] shrink-0"
-                />
-                <span className="text-[11px] font-medium leading-tight">
-                  {p?.username ?? "?"}
-                </span>
-              </div>
-            );
-          })
-        )}
-      </div>
-    </div>
   );
 }
