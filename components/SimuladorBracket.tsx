@@ -182,6 +182,74 @@ interface BNode {
   kind: "leaf" | "win" | "champion";
 }
 
+// Ganador de un cruce según unos picks planos (sin cruces fijados).
+function pickWinner(picks: Picks, m: SimMatch): string | null {
+  if (!m.home || !m.away) return null;
+  const p = picks[m.id];
+  return p === "home" ? m.home : p === "away" ? m.away : null;
+}
+
+// Construye las 5 rondas propagando ganadores con la función que se le pase.
+// Pura: sirve tanto para el cuadro en pantalla como para evaluar el cuadro de
+// cada amigo (campeón + aciertos) sin renderizarlo.
+function buildRounds(
+  assignments: Record<string, SlotAssignment>,
+  winnerOf: (m: SimMatch) => string | null,
+): SimRound[] {
+  const r32: SimMatch[] = R32_BRACKET_ORDER.map((id) => {
+    const a = assignments[id];
+    return {
+      id,
+      stage: "round32",
+      home: a?.homeTeamId ?? null,
+      away: a?.awayTeamId ?? null,
+    };
+  });
+  const next = (ids: string[], stage: MatchStage, prev: SimMatch[]): SimMatch[] =>
+    ids.map((id, i) => ({
+      id,
+      stage,
+      home: prev[2 * i] ? winnerOf(prev[2 * i]) : null,
+      away: prev[2 * i + 1] ? winnerOf(prev[2 * i + 1]) : null,
+    }));
+
+  const r16 = next(KNOCKOUT_SLOTS.round16, "round16", r32);
+  const qf = next(KNOCKOUT_SLOTS.quarterfinal, "quarterfinal", r16);
+  const sf = next(KNOCKOUT_SLOTS.semifinal, "semifinal", qf);
+  const fin = next([KNOCKOUT_SLOTS.final], "final", sf);
+
+  return [
+    { stage: "round32", matches: r32 },
+    { stage: "round16", matches: r16 },
+    { stage: "quarterfinal", matches: qf },
+    { stage: "semifinal", matches: sf },
+    { stage: "final", matches: fin },
+  ];
+}
+
+// Evalúa unos picks: campeón elegido y aciertos frente a los ganadores reales.
+function evaluatePicks(
+  picks: Picks,
+  assignments: Record<string, SlotAssignment>,
+  actualWinners: Record<string, string | null>,
+): { champion: string | null; hits: number; played: number } {
+  const w = (m: SimMatch) => pickWinner(picks, m);
+  const rds = buildRounds(assignments, w);
+  const byId = new Map(
+    rds.flatMap((rd) => rd.matches.map((m) => [m.id, m] as [string, SimMatch])),
+  );
+  let hits = 0;
+  let played = 0;
+  for (const id of ORDER) {
+    const actual = actualWinners[id];
+    if (!actual) continue;
+    played++;
+    const m = byId.get(id);
+    if (m && w(m) === actual) hits++;
+  }
+  return { champion: w(rds[4].matches[0]), hits, played };
+}
+
 export function SimuladorBracket() {
   const { user } = useAuth();
   const [assignments, setAssignments] = useState<Record<string, SlotAssignment>>(
@@ -291,42 +359,36 @@ export function SimuladorBracket() {
     [picks, isFixed, actualWinners],
   );
 
-  // Construye las rondas propagando los ganadores elegidos.
-  const rounds = useMemo<SimRound[]>(() => {
-    const r32: SimMatch[] = R32_BRACKET_ORDER.map((id) => {
-      const a = assignments[id];
-      return {
-        id,
-        stage: "round32",
-        home: a?.homeTeamId ?? null,
-        away: a?.awayTeamId ?? null,
-      };
+  // Construye las rondas propagando los ganadores elegidos (fijados incluidos).
+  const rounds = useMemo<SimRound[]>(
+    () => buildRounds(assignments, winnerOf),
+    [assignments, winnerOf],
+  );
+
+  // Resumen del cuadro de cada amigo (campeón elegido + aciertos), ordenado
+  // como ranking: más aciertos primero y, a igualdad, por nombre.
+  const friendStats = useMemo(() => {
+    const evaluated = friends
+      .map((f) => ({
+        ...f,
+        ...evaluatePicks(f.picks as Picks, assignments, actualWinners),
+      }))
+      .sort(
+        (a, b) =>
+          b.hits - a.hits ||
+          a.username.localeCompare(b.username, "es", { sensitivity: "base" }),
+      );
+    // Puesto compartido en caso de empate a aciertos.
+    let rank = 0;
+    let prevHits = -1;
+    return evaluated.map((f, i) => {
+      if (f.hits !== prevHits) {
+        rank = i + 1;
+        prevHits = f.hits;
+      }
+      return { ...f, rank };
     });
-    const next = (
-      ids: string[],
-      stage: MatchStage,
-      prev: SimMatch[],
-    ): SimMatch[] =>
-      ids.map((id, i) => ({
-        id,
-        stage,
-        home: prev[2 * i] ? winnerOf(prev[2 * i]) : null,
-        away: prev[2 * i + 1] ? winnerOf(prev[2 * i + 1]) : null,
-      }));
-
-    const r16 = next(KNOCKOUT_SLOTS.round16, "round16", r32);
-    const qf = next(KNOCKOUT_SLOTS.quarterfinal, "quarterfinal", r16);
-    const sf = next(KNOCKOUT_SLOTS.semifinal, "semifinal", qf);
-    const fin = next([KNOCKOUT_SLOTS.final], "final", sf);
-
-    return [
-      { stage: "round32", matches: r32 },
-      { stage: "round16", matches: r16 },
-      { stage: "quarterfinal", matches: qf },
-      { stage: "semifinal", matches: sf },
-      { stage: "final", matches: fin },
-    ];
-  }, [assignments, winnerOf]);
+  }, [friends, assignments, actualWinners]);
 
   // Posiciona conectores y nodos del cuadro radial.
   const graph = useMemo(() => {
@@ -530,6 +592,17 @@ export function SimuladorBracket() {
             <span>
               Estás viendo el cuadro de{" "}
               <span className="font-semibold">{viewing.username}</span>
+              {(() => {
+                const s = friendStats.find((f) => f.userId === viewing.userId);
+                if (!s || s.played === 0) return null;
+                return (
+                  <span className="text-muted-foreground">
+                    {" "}
+                    · {s.hits} {s.hits === 1 ? "acierto" : "aciertos"} de{" "}
+                    {s.played}
+                  </span>
+                );
+              })()}
             </span>
           </div>
           <button
@@ -733,42 +806,77 @@ export function SimuladorBracket() {
         </p>
       )}
 
-      {/* Cuadros de los amigos */}
-      {friends.length > 0 && (
+      {/* Cuadros de los amigos: tarjetas comparables de un vistazo (campeón
+          elegido + aciertos), ordenadas como ranking. Tocar una abre su cuadro. */}
+      {friendStats.length > 0 && (
         <div className="mt-10">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-            Cuadros de tus amigos
-          </h3>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {!viewing && effectiveLocked && (
-              <span className="shrink-0 px-3 py-1.5 rounded-full text-sm font-semibold bg-accent text-accent-foreground">
-                Tú
+          <div className="flex items-baseline justify-between gap-2 mb-3">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Cuadros de tus amigos
+            </h3>
+            {friendStats.some((f) => f.played > 0) && (
+              <span className="text-[11px] text-muted-foreground">
+                ordenados por aciertos
               </span>
             )}
-            {viewing && (
-              <button
-                onClick={() => setViewing(null)}
-                className="shrink-0 px-3 py-1.5 rounded-full text-sm font-semibold border border-accent text-accent hover:bg-accent-soft transition-colors"
-              >
-                ← Mi cuadro
-              </button>
-            )}
-            {friends
-              .filter((f) => f.userId !== user?.id)
-              .map((f) => (
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {friendStats.map((f) => {
+              const isMe = f.userId === user?.id;
+              const active = isMe
+                ? !viewing && Boolean(effectiveLocked)
+                : viewing?.userId === f.userId;
+              const champ = getTeam(f.champion);
+              const anyPlayed = f.played > 0;
+              const medal =
+                anyPlayed && f.rank <= 3 ? ["🥇", "🥈", "🥉"][f.rank - 1] : null;
+              return (
                 <button
                   key={f.userId}
-                  onClick={() => setViewing(f)}
-                  className={`shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold border transition-colors ${
-                    viewing?.userId === f.userId
-                      ? "border-accent bg-accent text-accent-foreground"
-                      : "border-border text-muted-foreground hover:bg-surface-muted"
+                  onClick={() => setViewing(isMe ? null : f)}
+                  className={`text-left rounded-2xl border p-3 transition-colors ${
+                    active
+                      ? "border-accent bg-accent-soft"
+                      : "border-border bg-surface hover:bg-surface-muted"
                   }`}
                 >
-                  <Avatar url={f.avatarUrl} name={f.username} size={20} />
-                  {f.username}
+                  <div className="flex items-center gap-3">
+                    <Avatar url={f.avatarUrl} name={f.username} size={36} />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold flex items-center gap-1.5">
+                        {medal && <span aria-hidden>{medal}</span>}
+                        <span className="truncate">{f.username}</span>
+                        {isMe && (
+                          <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-accent border border-accent/50 rounded-full px-1.5 py-0.5">
+                            tú
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground truncate mt-0.5">
+                        <span aria-hidden>🏆</span>{" "}
+                        {champ ? (
+                          <>
+                            <span aria-hidden>{champ.flag}</span> {champ.name}
+                          </>
+                        ) : (
+                          "Por decidir"
+                        )}
+                      </div>
+                    </div>
+                    {anyPlayed && (
+                      <div className="shrink-0 text-right" title="Aciertos">
+                        <div className="text-xl font-bold text-accent tabular-nums leading-none">
+                          {f.hits}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                          de {f.played}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </button>
-              ))}
+              );
+            })}
           </div>
         </div>
       )}
