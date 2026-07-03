@@ -189,13 +189,16 @@ export default function MatchDetailPage() {
   const homeGoals = goalEvents.filter((e) => e.teamId === homeTeamId);
   const awayGoals = goalEvents.filter((e) => e.teamId === awayTeamId);
 
-  // Recuento de goles desde la cronología (el gol en propia suma al rival).
+  // Recuento de goles desde la cronología. El feed ya atribuye cada gol al
+  // equipo que sube en el marcador (también los goles en propia) — igual que
+  // asumen la cronología y los goleadores — así que NO hay que voltear nada:
+  // hacerlo contaba el gol en propia para el rival equivocado e inflaba el
+  // marcador en vivo (p. ej. 1-2 cuando iban 1-1).
   let evHome = 0;
   let evAway = 0;
   for (const e of goalEvents) {
-    const own = e.detail === "Own Goal";
-    if ((e.teamId === homeTeamId) !== own) evHome += 1;
-    else evAway += 1;
+    if (e.teamId === homeTeamId) evHome += 1;
+    else if (e.teamId === awayTeamId) evAway += 1;
   }
 
   // Marcador en vivo: el mayor entre el feed (fixtures) y los goles de la
