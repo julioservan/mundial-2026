@@ -31,3 +31,25 @@ export async function setAdminLevel(userId: string, isAdmin: boolean) {
     .eq("id", userId);
   if (error) throw error;
 }
+
+// Ids de los jugadores con cuadro del Simulador guardado (para saber a quién
+// se le puede resetear desde el panel).
+export async function fetchSimuladorUserIds(): Promise<Set<string>> {
+  const { data, error } = await getSupabase()
+    .from("mundial_simulador")
+    .select("user_id")
+    .eq("locked", true);
+  if (error) throw error;
+  return new Set((data ?? []).map((r) => r.user_id as string));
+}
+
+// Borra el cuadro del Simulador de un jugador para que pueda rehacerlo.
+// Requiere ser admin (política RLS en simulador-admin.sql). Sus pronósticos
+// de la quiniela (mundial_predictions) NO se tocan.
+export async function resetSimulador(userId: string) {
+  const { error } = await getSupabase()
+    .from("mundial_simulador")
+    .delete()
+    .eq("user_id", userId);
+  if (error) throw error;
+}
