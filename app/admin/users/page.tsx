@@ -6,7 +6,13 @@ import { Avatar } from "@/components/Avatar";
 import { AdminGuard } from "@/components/AdminGuard";
 import { useAuth } from "@/lib/supabase/auth";
 import { levelLabel } from "@/lib/roles";
-import { type AdminProfile, fetchAllProfiles, setAdminLevel } from "@/lib/admin";
+import {
+  type AdminProfile,
+  fetchAllProfiles,
+  setAdminLevel,
+  fetchSimuladorUserIds,
+  resetSimulador,
+} from "@/lib/admin";
 
 export default function AdminUsersPage() {
   return (
@@ -22,13 +28,23 @@ function UsersManager() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Jugadores con cuadro del Simulador guardado (a esos se les puede resetear).
+  const [withSim, setWithSim] = useState<Set<string>>(new Set());
+  // Confirmación en dos pasos del reseteo: id pendiente de confirmar.
+  const [confirmSimId, setConfirmSimId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     async function load() {
       try {
-        const data = await fetchAllProfiles();
-        if (active) setProfiles(data);
+        const [data, simIds] = await Promise.all([
+          fetchAllProfiles(),
+          fetchSimuladorUserIds().catch(() => new Set<string>()),
+        ]);
+        if (active) {
+          setProfiles(data);
+          setWithSim(simIds);
+        }
       } catch (e) {
         if (active) setError(e instanceof Error ? e.message : "Error");
       } finally {
@@ -40,6 +56,26 @@ function UsersManager() {
       active = false;
     };
   }, []);
+
+  async function doResetSimulador(p: AdminProfile) {
+    setBusyId(p.id);
+    setError(null);
+    try {
+      await resetSimulador(p.id);
+      setWithSim((prev) => {
+        const next = new Set(prev);
+        next.delete(p.id);
+        return next;
+      });
+      setConfirmSimId(null);
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "No se pudo resetear el simulador",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   async function toggle(p: AdminProfile) {
     setBusyId(p.id);
@@ -118,6 +154,34 @@ function UsersManager() {
                     {levelLabel(p.isAdmin)}
                   </span>
                 </div>
+                {withSim.has(p.id) &&
+                  (confirmSimId === p.id ? (
+                    <span className="shrink-0 flex items-center gap-1.5">
+                      <button
+                        onClick={() => doResetSimulador(p)}
+                        disabled={busyId === p.id}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-full bg-pink text-white hover:opacity-90 transition-opacity disabled:opacity-40"
+                      >
+                        {busyId === p.id ? "…" : "Sí, borrar cuadro"}
+                      </button>
+                      <button
+                        onClick={() => setConfirmSimId(null)}
+                        disabled={busyId === p.id}
+                        className="px-2.5 py-1.5 text-xs font-semibold rounded-full border border-border text-muted-foreground hover:bg-surface-muted transition-colors"
+                      >
+                        No
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmSimId(p.id)}
+                      disabled={busyId === p.id}
+                      title="Borra su cuadro del Simulador para que lo rehaga. La quiniela no se toca."
+                      className="shrink-0 px-3 py-1.5 text-xs font-semibold rounded-full border border-pink/40 text-pink hover:bg-pink/10 transition-colors disabled:opacity-40"
+                    >
+                      Resetear simulador
+                    </button>
+                  ))}
                 <button
                   onClick={() => toggle(p)}
                   disabled={busyId === p.id || isMe}
