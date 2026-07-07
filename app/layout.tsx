@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/lib/supabase/auth";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
+import { VersionGuard } from "@/components/VersionGuard";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -39,6 +40,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${instrumentSerif.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
+        <VersionGuard />
         <AuthProvider>
           <Navbar />
           <main className="flex-1">{children}</main>
