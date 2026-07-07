@@ -26,7 +26,7 @@ export async function GET() {
     const { data } = await supabase
       .from("mundial_meta")
       .select("key, value")
-      .in("key", ["last_sync", "league_season_v2", "unknown_teams"]);
+      .in("key", ["last_sync", "league_season_v2", "unknown_teams", "last_backup"]);
 
     const meta = new Map((data ?? []).map((r) => [r.key as string, r.value]));
     const last = meta.get("last_sync") as
@@ -71,6 +71,22 @@ export async function GET() {
     if (unknown.length > 0) {
       status = status === "red" ? "red" : "amber";
       reasons.push(`${unknown.length} equipo(s) sin reconocer.`);
+    }
+    // Copia de seguridad de pronósticos: maybeBackup() es best-effort y traga
+    // errores (p. ej. si la tabla no existe), así que aquí se delata. Sin este
+    // aviso, los backups estuvieron fallando en silencio durante semanas.
+    const backup = meta.get("last_backup") as { at?: string } | undefined;
+    const backupAgeH = backup?.at
+      ? (Date.now() - new Date(backup.at).getTime()) / 3_600_000
+      : null;
+    if (backupAgeH == null) {
+      status = status === "red" ? "red" : "amber";
+      reasons.push(
+        "Copia de pronósticos NUNCA hecha (¿ejecutaste predictions-backup.sql?).",
+      );
+    } else if (backupAgeH > 48) {
+      status = status === "red" ? "red" : "amber";
+      reasons.push(`Copia de pronósticos atrasada (${Math.floor(backupAgeH)} h).`);
     }
 
     return respond(
