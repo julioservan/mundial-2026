@@ -47,17 +47,19 @@ interface Phase {
 function phaseOf(m: Match): Phase {
   if (m.stage === "group") {
     const md = m.matchday ?? 1;
-    // Las eliminatorias van primero (order 10-15) y las jornadas después en
-    // orden descendente (J3, J2, J1) -> order 97, 98, 99.
+    // Tras las eliminatorias, las jornadas en orden descendente (J3, J2, J1)
+    // -> order 97, 98, 99.
     return { key: `g${md}`, label: `Jornada ${md}`, order: 100 - md };
   }
+  // Lo más NUEVO primero: la ronda más avanzada disponible va delante (p. ej.
+  // cuartos antes que octavos y dieciseisavos).
   const KO_ORDER: Record<string, number> = {
-    round32: 10,
-    round16: 11,
-    quarterfinal: 12,
-    semifinal: 13,
-    third_place: 14,
-    final: 15,
+    final: 10,
+    third_place: 11,
+    semifinal: 12,
+    quarterfinal: 13,
+    round16: 14,
+    round32: 15,
   };
   return { key: m.stage, label: stageLabel(m.stage), order: KO_ORDER[m.stage] ?? 99 };
 }
@@ -102,8 +104,8 @@ export function PredictionForm({ matches }: Props) {
         const anyPlayable = enriched.some(
           (x) => x.stage === m.stage && isPlayable(x),
         );
-        // Dieciseisavos siempre visible (es la pestaña por defecto); el resto de
-        // rondas KO solo aparecen cuando ya hay cruces con equipos.
+        // Dieciseisavos siempre visible (histórico); el resto de rondas KO
+        // solo aparecen cuando ya hay cruces con equipos.
         if (m.stage !== "round32" && !anyPlayable) continue;
       }
       const p = phaseOf(m);
@@ -113,14 +115,12 @@ export function PredictionForm({ matches }: Props) {
   }, [enriched]);
 
   // Pestaña efectiva: la elegida por el usuario si sigue existiendo; si no,
-  // dieciseisavos (round32) por defecto, o la primera disponible.
+  // la primera disponible (que es la ronda más nueva con cruces).
   const effectivePhase = useMemo(() => {
     if (activePhase && phases.some((p) => p.key === activePhase)) {
       return activePhase;
     }
-    return (
-      phases.find((p) => p.key === "round32")?.key ?? phases[0]?.key ?? "g1"
-    );
+    return phases[0]?.key ?? "g1";
   }, [activePhase, phases]);
 
   useEffect(() => {
