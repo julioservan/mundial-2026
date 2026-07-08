@@ -227,11 +227,30 @@ function buildRounds(
   ];
 }
 
-// Evalúa unos picks: campeón elegido y aciertos frente a los ganadores reales.
+// ¿Puntúa este cruce para un cuadro guardado en `savedAt`? Solo si el partido
+// se jugó DESPUÉS de guardar: lo que ya estaba decidido al guardar (cruces
+// fijados incluidos) no era pronóstico, era historia — y contarlo hacía que
+// todos los cuadros recientes salieran con los mismos aciertos.
+function countsFor(
+  id: string,
+  savedAt: string | null,
+  assignments: Record<string, SlotAssignment>,
+  actualWinners: Record<string, string | null>,
+): boolean {
+  if (!actualWinners[id]) return false;
+  if (!savedAt) return false; // borrador sin guardar: nada jugado puntúa
+  const kickoff = assignments[id]?.kickoff;
+  if (!kickoff) return false;
+  return Date.parse(kickoff) > Date.parse(savedAt);
+}
+
+// Evalúa unos picks: campeón elegido y aciertos frente a los ganadores reales
+// (solo cruces jugados después de guardar el cuadro).
 function evaluatePicks(
   picks: Picks,
   assignments: Record<string, SlotAssignment>,
   actualWinners: Record<string, string | null>,
+  savedAt: string | null,
 ): { champion: string | null; hits: number; played: number } {
   const w = (m: SimMatch) => pickWinner(picks, m);
   const rds = buildRounds(assignments, w);
@@ -241,11 +260,10 @@ function evaluatePicks(
   let hits = 0;
   let played = 0;
   for (const id of ORDER) {
-    const actual = actualWinners[id];
-    if (!actual) continue;
+    if (!countsFor(id, savedAt, assignments, actualWinners)) continue;
     played++;
     const m = byId.get(id);
-    if (m && w(m) === actual) hits++;
+    if (m && w(m) === actualWinners[id]) hits++;
   }
   return { champion: w(rds[4].matches[0]), hits, played };
 }
@@ -262,6 +280,7 @@ export function SimuladorBracket() {
 
   // Mi cuadro guardado (bloqueado) y el de los amigos.
   const [lockedPicks, setLockedPicks] = useState<Picks | null>(null);
+  const [lockedSavedAt, setLockedSavedAt] = useState<string | null>(null);
   const [friends, setFriends] = useState<SimuladorFriend[]>([]);
   const [viewing, setViewing] = useState<SimuladorFriend | null>(null); // null = el mío
   const [confirmSave, setConfirmSave] = useState(false);
@@ -298,7 +317,10 @@ export function SimuladorBracket() {
     if (user) {
       fetchMySimulador(user.id)
         .then((row) => {
-          if (active) setLockedPicks(row?.locked ? (row.picks as Picks) : null);
+          if (active) {
+            setLockedPicks(row?.locked ? (row.picks as Picks) : null);
+            setLockedSavedAt(row?.locked ? row.savedAt : null);
+          }
         })
         .catch(() => {});
     }
@@ -371,7 +393,7 @@ export function SimuladorBracket() {
     const evaluated = friends
       .map((f) => ({
         ...f,
-        ...evaluatePicks(f.picks as Picks, assignments, actualWinners),
+        ...evaluatePicks(f.picks as Picks, assignments, actualWinners, f.savedAt),
       }))
       .sort(
         (a, b) =>
@@ -495,7 +517,26 @@ export function SimuladorBracket() {
     [rounds, isFixed],
   );
 
-  // Acierto = el equipo que pusiste como ganador del cruce ganó de verdad.
+  // Fecha de guardado del cuadro que se está viendo (null = borrador propio).
+  const displayedSavedAt = viewing
+    ? viewing.savedAt
+    : effectiveLocked
+      ? lockedSavedAt
+      : null;
+
+  // Cruces que puntúan para el cuadro mostrado: jugados DESPUÉS de guardarlo.
+  const countingIds = useMemo(
+    () =>
+      new Set(
+        ORDER.filter((id) =>
+          countsFor(id, displayedSavedAt, assignments, actualWinners),
+        ),
+      ),
+    [displayedSavedAt, assignments, actualWinners],
+  );
+
+  // Acierto = el equipo que pusiste como ganador del cruce ganó de verdad —
+  // pero solo en cruces que aún no se habían jugado al guardar el cuadro.
   const score = useMemo(() => {
     const byPhase: Record<string, { hits: number; played: number }> = {};
     let hits = 0;
@@ -507,19 +548,18 @@ export function SimuladorBracket() {
       let h = 0;
       let p = 0;
       for (const id of ph.ids) {
-        const actual = actualWinners[id];
-        if (!actual) continue; // aún no jugado / sin ganador claro
+        if (!countingIds.has(id)) continue; // no jugado, o ya decidido al guardar
         p++;
         const m = matchById.get(id);
         const predicted = m ? winnerOf(m) : null;
-        if (predicted && predicted === actual) h++;
+        if (predicted && predicted === actualWinners[id]) h++;
       }
       byPhase[ph.key] = { hits: h, played: p };
       hits += h;
       played += p;
     }
     return { hits, played, byPhase };
-  }, [actualWinners, rounds, winnerOf]);
+  }, [actualWinners, rounds, winnerOf, countingIds]);
 
   function choose(parent: SimMatch, side: Side) {
     // Los cruces ya jugados están fijados al ganador real: no se tocan.
@@ -548,6 +588,7 @@ export function SimuladorBracket() {
       // Se guardan los picks efectivos: los fijados (ya jugados) incluidos.
       await saveMySimulador(user.id, effectivePicks);
       setLockedPicks(effectivePicks);
+      setLockedSavedAt(new Date().toISOString());
       setConfirmSave(false);
       // Refresca la lista de amigos para incluir el cuadro recién guardado.
       fetchAllSimuladores()
@@ -902,6 +943,7 @@ export function SimuladorBracket() {
               matches={rounds[ph.roundIdx].matches}
               picks={effectivePicks}
               actualWinners={actualWinners}
+              countingIds={countingIds}
               stats={score.byPhase[ph.key]}
             />
           ))}
@@ -956,12 +998,16 @@ function PhaseVotes({
   matches,
   picks,
   actualWinners,
+  countingIds,
   stats,
 }: {
   label: string;
   matches: SimMatch[];
   picks: Picks;
   actualWinners: Record<string, string | null>;
+  // Cruces que puntúan para este cuadro (jugados tras guardarlo); el resto se
+  // muestra neutro, sin ✓/✗.
+  countingIds: Set<string>;
   stats: { hits: number; played: number } | undefined;
 }) {
   return (
@@ -984,11 +1030,14 @@ function PhaseVotes({
           );
           const actual = actualWinners[m.id];
           const pickedId = picked === "home" ? m.home : picked === "away" ? m.away : null;
-          const status: "hit" | "miss" | "pending" = !actual
-            ? "pending"
-            : pickedId && pickedId === actual
-              ? "hit"
-              : "miss";
+          // Neutro si no se ha jugado O si ya estaba decidido al guardar el
+          // cuadro (esos no puntúan: no eran pronóstico).
+          const status: "hit" | "miss" | "pending" =
+            !actual || !countingIds.has(m.id)
+              ? "pending"
+              : pickedId && pickedId === actual
+                ? "hit"
+                : "miss";
           return (
             <div
               key={m.id}
