@@ -7,6 +7,9 @@ export type SimPicks = Record<string, SimSide>;
 export interface SimuladorRow {
   picks: SimPicks;
   locked: boolean;
+  // Cuándo se guardó: los cruces ya jugados a esa hora no puntúan (no eran
+  // pronóstico, eran historia).
+  savedAt: string | null;
 }
 
 export interface SimuladorFriend {
@@ -15,6 +18,7 @@ export interface SimuladorFriend {
   avatarUrl: string | null;
   picks: SimPicks;
   locked: boolean;
+  savedAt: string | null;
 }
 
 // Cuadro guardado del usuario (null si todavía no ha guardado nada).
@@ -24,7 +28,7 @@ export async function fetchMySimulador(
   if (!isSupabaseConfigured) return null;
   const { data, error } = await getSupabase()
     .from("mundial_simulador")
-    .select("picks, locked")
+    .select("picks, locked, updated_at")
     .eq("user_id", userId)
     .maybeSingle();
   if (error) throw error;
@@ -32,6 +36,7 @@ export async function fetchMySimulador(
   return {
     picks: (data.picks as SimPicks) ?? {},
     locked: Boolean(data.locked),
+    savedAt: (data.updated_at as string | null) ?? null,
   };
 }
 
@@ -61,7 +66,7 @@ export async function fetchAllSimuladores(): Promise<SimuladorFriend[]> {
   const [simRes, profRes] = await Promise.all([
     supabase
       .from("mundial_simulador")
-      .select("user_id, picks, locked")
+      .select("user_id, picks, locked, updated_at")
       .eq("locked", true),
     supabase.from("mundial_profiles").select("id, username, avatar_url"),
   ]);
@@ -86,6 +91,7 @@ export async function fetchAllSimuladores(): Promise<SimuladorFriend[]> {
       avatarUrl: prof?.avatar ?? null,
       picks: (r.picks as SimPicks) ?? {},
       locked: Boolean(r.locked),
+      savedAt: (r.updated_at as string | null) ?? null,
     };
   });
 }
