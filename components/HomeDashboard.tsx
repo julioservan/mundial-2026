@@ -310,12 +310,37 @@ export function HomeDashboard() {
         </h1>
         {myIndex >= 0 && (
           <p className="text-muted-foreground mt-3 text-sm">
-            Vas <span className="text-foreground font-semibold">#{myIndex + 1}</span>{" "}
-            en el ranking con{" "}
-            <span className="text-foreground font-semibold">
-              {board[myIndex].points}
-            </span>{" "}
-            puntos.
+            {finale ? (
+              // Mundial terminado: en pasado, con guiño según el puesto.
+              <>
+                Has quedado{" "}
+                <span className="text-foreground font-semibold">
+                  #{myIndex + 1}
+                </span>{" "}
+                en el ranking final con{" "}
+                <span className="text-foreground font-semibold">
+                  {board[myIndex].points}
+                </span>{" "}
+                puntos.
+                {myIndex === 0
+                  ? " 👑 ¡Campeón de pronósticos!"
+                  : myIndex <= 2
+                    ? " 🏅 ¡Podio!"
+                    : " El próximo Mundial es el bueno."}
+              </>
+            ) : (
+              <>
+                Vas{" "}
+                <span className="text-foreground font-semibold">
+                  #{myIndex + 1}
+                </span>{" "}
+                en el ranking con{" "}
+                <span className="text-foreground font-semibold">
+                  {board[myIndex].points}
+                </span>{" "}
+                puntos.
+              </>
+            )}
           </p>
         )}
       </header>
