@@ -149,3 +149,66 @@ body {
   animation-iteration-count: 1;
   animation-fill-mode: forwards;
 }
+
+/* ============================================================================
+   Home especial de fin de Mundial (ChampionsFinale)
+   ========================================================================== */
+
+/* Entrada cinematográfica: aparece desenfocado y sube a su sitio. */
+@keyframes finale-in {
+  0% { opacity: 0; transform: translateY(20px) scale(0.96); filter: blur(8px); }
+  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+.finale-in {
+  opacity: 0;
+  animation: finale-in 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Flotación suave (la bandera respira). */
+@keyframes finale-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-9px); }
+}
+.finale-float { animation: finale-float 5s ease-in-out infinite; }
+
+/* Halo de luz que respira detrás del hero. */
+@keyframes finale-glow {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+.finale-glow { animation: finale-glow 6s ease-in-out infinite; }
+
+/* Nombre de la campeona con brillo que recorre el texto. */
+@keyframes finale-shimmer {
+  0% { background-position: 200% 50%; }
+  100% { background-position: -200% 50%; }
+}
+.finale-shimmer {
+  background: linear-gradient(110deg, var(--accent) 38%, #ffffff 50%, var(--accent) 62%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: finale-shimmer 4s linear infinite;
+}
+
+/* Destello dorado que barre la tarjeta del campeón de pronósticos. */
+@keyframes finale-shine {
+  0%, 55% { transform: translateX(-180%) skewX(-18deg); }
+  85%, 100% { transform: translateX(280%) skewX(-18deg); }
+}
+.finale-shine {
+  animation: finale-shine 4.5s ease-in-out infinite;
+}
+
+/* Accesibilidad: sin movimiento para quien lo pide (confetti incluido). */
+@media (prefers-reduced-motion: reduce) {
+  .finale-in { animation: none; opacity: 1; }
+  .finale-float,
+  .finale-glow,
+  .finale-shimmer,
+  .finale-shine,
+  .sim-confetti {
+    animation: none;
+  }
+}
