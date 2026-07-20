@@ -225,7 +225,8 @@ export function ChampionsFinale({
     .sort((a, b) => b.acc - a.acc || b.correct - a.correct);
   const bestAcc = byAccuracy[0] ?? null;
 
-  // Parallax 3D del hero: el ratón inclina la tarjeta (en táctil, no hace nada).
+  // Parallax 3D del hero: en escritorio lo inclina el ratón; en el móvil, el
+  // GIROSCOPIO (inclinar el teléfono inclina la tarjeta, como una ventana).
   const heroRef = useRef<HTMLElement | null>(null);
   function onHeroMove(ev: MouseEvent<HTMLElement>) {
     const el = heroRef.current;
@@ -244,8 +245,41 @@ export function ChampionsFinale({
     el.style.setProperty("--ry", "0deg");
   }
 
+  // Giroscopio (solo pantallas táctiles): la primera lectura fija la postura
+  // "neutra" de la mano y se inclina en relativo, con topes suaves.
+  useEffect(() => {
+    if (window.matchMedia("(pointer: fine)").matches) return; // escritorio: ratón
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let base: { b: number; g: number } | null = null;
+    const clamp = (v: number, lim: number) => Math.max(-lim, Math.min(lim, v));
+    const handler = (e: DeviceOrientationEvent) => {
+      const el = heroRef.current;
+      if (!el || e.beta == null || e.gamma == null) return;
+      if (!base) base = { b: e.beta, g: e.gamma };
+      const rx = clamp((e.beta - base.b) / 6, 6);
+      const ry = clamp((e.gamma - base.g) / 6, 8);
+      el.style.setProperty("--rx", `${(-rx).toFixed(2)}deg`);
+      el.style.setProperty("--ry", `${ry.toFixed(2)}deg`);
+    };
+    window.addEventListener("deviceorientation", handler);
+    return () => window.removeEventListener("deviceorientation", handler);
+  }, []);
+
   // Clic en el hero = ráfaga extra de confetti (remonta la capa con otra key).
+  // En iOS el giroscopio exige permiso tras un gesto: se pide con el primer
+  // toque, aprovechando el del confetti (en Android no hace falta).
   const [burst, setBurst] = useState(0);
+  const gyroAsked = useRef(false);
+  function onHeroClick() {
+    setBurst((b) => b + 1);
+    const D = DeviceOrientationEvent as unknown as {
+      requestPermission?: () => Promise<string>;
+    };
+    if (typeof D?.requestPermission === "function" && !gyroAsked.current) {
+      gyroAsked.current = true;
+      D.requestPermission().catch(() => {});
+    }
+  }
 
   // Secciones que animan al entrar en pantalla.
   const { ref: podiumRef, inView: podiumIn } = useInView<HTMLDivElement>(0.3);
@@ -272,7 +306,7 @@ export function ChampionsFinale({
         ref={heroRef}
         onMouseMove={onHeroMove}
         onMouseLeave={onHeroLeave}
-        onClick={() => setBurst((b) => b + 1)}
+        onClick={onHeroClick}
         title="🎉 Toca para más confetti"
         className="relative overflow-hidden bg-surface border border-border rounded-3xl px-6 py-10 sm:py-14 text-center mb-10 cursor-pointer select-none"
         style={{
