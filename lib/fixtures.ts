@@ -37,6 +37,8 @@ export interface FixtureSnapshot {
   awayTeamId: string | null;
   homeScore: number | null;
   awayScore: number | null;
+  penHome: number | null;
+  penAway: number | null;
   status: "scheduled" | "live" | "finished";
   kickoff: string | null;
 }
@@ -45,7 +47,7 @@ export async function fetchFixtures(): Promise<Record<string, FixtureSnapshot>> 
   const { data, error } = await getSupabase()
     .from("mundial_fixtures")
     .select(
-      "match_id, home_team_id, away_team_id, home_score, away_score, status, kickoff",
+      "match_id, home_team_id, away_team_id, home_score, away_score, home_pen, away_pen, status, kickoff",
     );
   if (error) throw error;
   const map: Record<string, FixtureSnapshot> = {};
@@ -55,6 +57,8 @@ export async function fetchFixtures(): Promise<Record<string, FixtureSnapshot>> 
       awayTeamId: (row.away_team_id as string | null) ?? null,
       homeScore: (row.home_score as number | null) ?? null,
       awayScore: (row.away_score as number | null) ?? null,
+      penHome: (row.home_pen as number | null) ?? null,
+      penAway: (row.away_pen as number | null) ?? null,
       status: (row.status as FixtureSnapshot["status"]) ?? "scheduled",
       kickoff: (row.kickoff as string | null) ?? null,
     };
