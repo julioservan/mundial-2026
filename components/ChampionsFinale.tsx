@@ -58,6 +58,9 @@ function Confetti() {
               borderRadius: c.round ? "9999px" : "1px",
               animationDelay: `${c.delay}s`,
               animationDuration: `${c.duration}s`,
+              // A diferencia del Simulador (una sola pasada), aquí la fiesta
+              // no para: el confetti cae en bucle mientras mires la página.
+              animationIterationCount: "infinite",
               "--dx": `${c.drift}px`,
               "--spin": `${c.spin}deg`,
             } as CSSProperties
@@ -147,7 +150,7 @@ export function ChampionsFinale({
           <div className="text-[11px] font-semibold tracking-[0.3em] uppercase text-amber mb-4">
             🏆 Mundial 2026 · Se acabó
           </div>
-          <div className="text-8xl sm:text-9xl leading-none mb-3" aria-hidden>
+          <div className="text-6xl sm:text-7xl leading-none mb-3" aria-hidden>
             {champ?.flag ?? "🏆"}
           </div>
           <h2 className="text-5xl sm:text-7xl font-bold tracking-tight">
