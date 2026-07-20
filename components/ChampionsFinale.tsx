@@ -33,8 +33,11 @@ const CONFETTI_COLORS = [
 ];
 const CONFETTI = Array.from({ length: 140 }, (_, i) => ({
   left: (i * 31) % 100,
-  delay: ((i * 47) % 220) / 100,
-  duration: 2.2 + ((i * 29) % 22) / 10,
+  // Delay NEGATIVO: al abrir la página la lluvia ya está en marcha (cada pieza
+  // arranca en un punto distinto de su caída, no todas desde arriba).
+  delay: -(((i * 47) % 700) / 100),
+  // Caída tranquila (7–12 s); la receta del Simulador (2–4 s) era un vendaval.
+  duration: 7 + ((i * 29) % 50) / 10,
   color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
   size: 7 + (i % 6) * 2,
   round: i % 3 === 0,
