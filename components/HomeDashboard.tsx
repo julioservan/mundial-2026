@@ -16,6 +16,9 @@ import { fetchFixtures, type FixtureSnapshot } from "@/lib/fixtures";
 import { fetchLeaderboard, type LiveLeaderboardEntry } from "@/lib/leaderboard";
 import type { Pick } from "@/lib/scoring";
 import { PeoplePicksCompact, type VoterPick } from "@/components/PeoplePicks";
+import { ChampionsFinale, type FinalSummary } from "@/components/ChampionsFinale";
+import { actualWinnerOf } from "@/lib/bracket";
+import { KNOCKOUT_SLOTS } from "@/lib/data/matches";
 
 // Ventana en la que consideramos un partido "en juego" desde su inicio.
 const LIVE_MS = 135 * 60 * 1000; // 2h15m
@@ -186,6 +189,61 @@ export function HomeDashboard() {
   const myIndex = board.findIndex((e) => e.userId === user?.id);
   const top = board.slice(0, 5);
 
+  // ¿Se acabó el Mundial? Con la final terminada y campeón conocido, la home
+  // entera pasa al modo celebración (ChampionsFinale).
+  const finale = useMemo<{
+    champion: string;
+    runnerUp: string | null;
+    third: string | null;
+    final: FinalSummary;
+  } | null>(() => {
+    const decideKO = (id: string): string | null => {
+      const fx = fixtures[id];
+      if (!fx || fx.status !== "finished") return null;
+      const r = results[id];
+      const numeric =
+        r && r.home !== "" && r.away !== ""
+          ? { home: Number(r.home), away: Number(r.away) }
+          : undefined;
+      return actualWinnerOf(
+        {
+          homeTeamId: fx.homeTeamId,
+          awayTeamId: fx.awayTeamId,
+          status: fx.status,
+          homeScore: fx.homeScore,
+          awayScore: fx.awayScore,
+          penHome: fx.penHome,
+          penAway: fx.penAway,
+        },
+        numeric,
+      );
+    };
+
+    const finalId = KNOCKOUT_SLOTS.final;
+    const champion = finalId ? decideKO(finalId) : null;
+    if (!champion) return null;
+    const fx = fixtures[finalId];
+    const r = results[finalId];
+    return {
+      champion,
+      runnerUp:
+        champion === fx.homeTeamId ? fx.awayTeamId : fx.homeTeamId,
+      third: KNOCKOUT_SLOTS.third_place
+        ? decideKO(KNOCKOUT_SLOTS.third_place)
+        : null,
+      final: {
+        homeTeamId: fx.homeTeamId,
+        awayTeamId: fx.awayTeamId,
+        homeScore: fx.homeScore,
+        awayScore: fx.awayScore,
+        r90Home: r && r.home !== "" ? Number(r.home) : null,
+        r90Away: r && r.away !== "" ? Number(r.away) : null,
+        penHome: fx.penHome,
+        penAway: fx.penAway,
+      },
+    };
+  }, [fixtures, results]);
+
   // Pronósticos SOLO de los partidos que se muestran. Ojo: pedir la tabla
   // entera (como antes) choca con el tope de 1000 filas por consulta de
   // Supabase y deja fuera los pronósticos de los partidos visibles.
@@ -262,6 +320,17 @@ export function HomeDashboard() {
         )}
       </header>
 
+      {finale ? (
+        <ChampionsFinale
+          champion={finale.champion}
+          runnerUp={finale.runnerUp}
+          third={finale.third}
+          final={finale.final}
+          board={board}
+          meId={user?.id ?? null}
+        />
+      ) : (
+        <>
       {live.length > 0 && (
         <section className="mb-10">
           <div className="flex items-center gap-2 mb-4">
@@ -355,6 +424,8 @@ export function HomeDashboard() {
           </ul>
         )}
       </section>
+        </>
+      )}
     </div>
   );
 }
